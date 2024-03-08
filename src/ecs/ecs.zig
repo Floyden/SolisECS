@@ -94,10 +94,8 @@ pub const World = struct {
         return self.storage.addEntity(Entity{ .id = self.maxEnt });
     }
 
-    pub fn set(self: *World, entity: Entity, comptime T: type, arg: T) void {
-        _ = entity;
-        _ = arg;
-        _ = self;
+    pub fn set(self: *World, entity: Entity, comptime T: type, arg: T) !void {
+        try self.storage.setComponents(entity, T, arg);
     }
 
     pub fn get(self: *World, entity: Entity, comptime T: type) ?T {

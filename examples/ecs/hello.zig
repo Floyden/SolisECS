@@ -22,8 +22,8 @@ pub fn main() !void {
     try world.addSystem(Move, .{ Position, Velocity });
 
     const foo = try world.create();
-    world.set(foo, Position, .{ .x = 0, .y = 0 });
-    world.set(foo, Velocity, .{ .x = 1, .y = 0 });
+    try world.set(foo, Position, .{ .x = 0, .y = 0 });
+    try world.set(foo, Velocity, .{ .x = 1, .y = 0 });
 
     world.step();
 
