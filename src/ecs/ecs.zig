@@ -1,8 +1,9 @@
 const std = @import("std");
+const Storage = @import("storage.zig").Storage;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 
-const Entity = struct { id: usize };
+pub const Entity = struct { id: usize };
 
 const ComponentDesc = struct {
     size: usize,
@@ -33,14 +34,16 @@ pub const World = struct {
     allocator: Allocator,
     components: ArrayList(ComponentDesc),
     systems: ArrayList(SystemDesc),
-    entities: ArrayList(Entity),
+    maxEnt: usize,
+    storage: Storage,
 
     pub fn init(allocator: Allocator) World {
         return World{
             .allocator = allocator,
             .components = ArrayList(ComponentDesc).init(allocator),
             .systems = ArrayList(SystemDesc).init(allocator),
-            .entities = ArrayList(Entity).init(allocator),
+            .maxEnt = 1,
+            .storage = Storage.init(allocator) catch unreachable,
         };
     }
 
@@ -50,7 +53,7 @@ pub const World = struct {
         }
         self.systems.deinit();
         self.components.deinit();
-        self.entities.deinit();
+        self.storage.deinit();
     }
 
     // [TODO] implement
@@ -87,8 +90,8 @@ pub const World = struct {
     }
 
     pub fn create(self: *World) !Entity {
-        try self.entities.append(Entity{ .id = self.entities.items.len });
-        return self.entities.getLast();
+        defer self.maxEnt += 1;
+        return self.storage.addEntity(Entity{ .id = self.maxEnt });
     }
 
     pub fn set(self: *World, entity: Entity, comptime T: type, arg: T) void {
