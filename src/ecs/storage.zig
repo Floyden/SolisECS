@@ -23,6 +23,10 @@ const ComponentList = struct {
         return ComponentList{ .allocator = allocator, .desc = desc };
     }
 
+    pub fn deinit(self: *ComponentList) void {
+        _ = self;
+    }
+
     pub fn append(self: *ComponentList) !void {
         _ = self;
     }
@@ -66,7 +70,9 @@ const Archetype = struct {
 
     pub fn deinit(self: *Archetype) void {
         self.entities.deinit();
-        self.types.deinit();
+        for (self.components.items) |*list| {
+            list.deinit();
+        }
         self.components.deinit();
         self.removeTypeEdges.deinit();
         self.addTypeEdges.deinit();
@@ -100,6 +106,9 @@ pub const Storage = struct {
     }
 
     pub fn deinit(self: *Storage) void {
+        for (self.archetypes.items) |*list| {
+            list.deinit();
+        }
         self.archetypes.deinit();
     }
 
