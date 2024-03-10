@@ -2,6 +2,7 @@ const std = @import("std");
 const ecs = @import("ecs.zig");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+const ComponentDesc = ecs.ComponentDesc;
 
 const TypeId = struct {
     name: [:0]const u8,
@@ -12,14 +13,15 @@ fn GetTypeId(comptime T: type) TypeId {
 }
 
 const ComponentList = struct {
-    // allocator: Allocator,
+    desc: ComponentDesc,
+    allocator: Allocator,
     // data: *anyopaque,
     // elements: usize,
     // capacity: usize,
-    //
-    // pub fn init(allocator: Allocator, comptime T: type) ComponentList {
-    //     return ComponentList{ .allocator = allocator, .data = allocator.alloc(T, 16), .elements = 0, .capacity = 16 };
-    // }
+
+    pub fn init(allocator: Allocator, desc: ComponentDesc) ComponentList {
+        return ComponentList{ .allocator = allocator, .desc = desc };
+    }
 
     pub fn append(self: *ComponentList) !void {
         _ = self;
@@ -34,34 +36,28 @@ const ArchetypeEdge = struct {
 
 const Archetype = struct {
     entities: ArrayList(ecs.Entity),
-    types: ArrayList([:0]const u8),
     components: ArrayList(ComponentList),
 
     addTypeEdges: ArrayList(ArchetypeEdge),
     removeTypeEdges: ArrayList(ArchetypeEdge),
 
-    fn typeLt(ctx: void, a: [:0]const u8, b: [:0]const u8) bool {
+    fn typeLt(ctx: void, a: ComponentList, b: ComponentList) bool {
         _ = ctx;
-        return @intFromPtr(a.ptr) < @intFromPtr(b.ptr);
+        return @intFromPtr(a.desc.name.ptr) < @intFromPtr(b.desc.name.ptr);
     }
 
-    pub fn init(allocator: Allocator, typeNames: [][:0]const u8) !Archetype {
-        var typeVec = ArrayList([:0]const u8).init(allocator);
+    pub fn init(allocator: Allocator, components: []ComponentDesc) !Archetype {
         var componentVec = ArrayList(ComponentList).init(allocator);
 
-        for (0..typeNames.len) |i| {
-            try typeVec.append(typeNames[i]);
-            try componentVec.append(ComponentList{});
+        for (components) |component| {
+            try componentVec.append(ComponentList.init(allocator, component));
         }
 
         // Number of elements should be rather small, perfect for insertion sort
-        std.sort.insertion([:0]const u8, typeVec.items, {}, typeLt);
-
-        std.debug.print("{s}\n", .{typeVec.items});
+        std.sort.insertion(ComponentList, componentVec.items, {}, typeLt);
 
         return Archetype{
             .entities = ArrayList(ecs.Entity).init(allocator),
-            .types = typeVec,
             .components = componentVec,
             .addTypeEdges = ArrayList(ArchetypeEdge).init(allocator),
             .removeTypeEdges = ArrayList(ArchetypeEdge).init(allocator),
@@ -148,10 +144,12 @@ pub const Storage = struct {
 
         // Create new Archetype if the destination is not found
         if (destination == null) {
-            var types = try self.allocator.alloc([:0]const u8, source.?.types.items.len + 1);
+            var types = try self.allocator.alloc(ComponentDesc, source.?.components.items.len + 1);
             defer self.allocator.free(types);
-            std.mem.copyForwards([:0]const u8, types, source.?.types.items);
-            types[source.?.types.items.len] = @typeName(T);
+            for (source.?.components.items, 0..) |list, i| {
+                types.ptr[i] = list.desc;
+            }
+            types[source.?.components.items.len] = ComponentDesc{ .size = @sizeOf(T), .alignment = @alignOf(T), .name = @typeName(T) };
 
             try self.archetypes.append(try Archetype.init(self.allocator, types));
             var dest = &self.archetypes.items[self.archetypes.items.len - 1];
@@ -161,20 +159,18 @@ pub const Storage = struct {
         }
 
         // Move entity
-        try destination.?.entities.append(source.?.entities.items[entityIdx]);
+        try destination.?.entities.append(source.?.entities.swapRemove(entityIdx));
         var i: usize = 0;
         var j: usize = 0;
-        while (j < destination.?.types.items.len) {
-            if (@intFromPtr(destination.?.types.items[j].ptr) != @intFromPtr(@typeName(T))) {
+        while (j < destination.?.components.items.len) {
+            if (@intFromPtr(destination.?.components.items[j].desc.name.ptr) != @intFromPtr(@typeName(T))) {
                 // _ = source.?.components.items[j].swapRemove(entityIdx);
                 // try destination.?.components.append(source.?.components.items[i]);
                 i += 1;
             } else {
-                try destination.?.components.items[j].append(); //arg);
+                try destination.?.components.items[j].append();
             }
             j += 1;
         }
-
-        _ = source.?.entities.swapRemove(entityIdx);
     }
 };

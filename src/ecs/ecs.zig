@@ -5,7 +5,7 @@ const ArrayList = std.ArrayList;
 
 pub const Entity = struct { id: usize };
 
-const ComponentDesc = struct {
+pub const ComponentDesc = struct {
     size: usize,
     alignment: usize,
     name: [:0]const u8,
