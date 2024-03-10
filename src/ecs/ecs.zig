@@ -98,9 +98,11 @@ pub const World = struct {
         try self.storage.setComponents(entity, T, arg);
     }
 
-    pub fn get(self: *World, entity: Entity, comptime T: type) ?T {
-        _ = entity;
-        _ = self;
-        return null;
+    pub fn get(self: *World, entity: Entity, comptime T: type) ?*const T {
+        return self.storage.get(T, entity);
+    }
+
+    pub fn getMut(self: *World, entity: Entity, comptime T: type) ?*T {
+        return self.storage.getMut(T, entity);
     }
 };

@@ -14,21 +14,44 @@ fn GetTypeId(comptime T: type) TypeId {
 
 const ComponentList = struct {
     desc: ComponentDesc,
-    allocator: Allocator,
-    // data: *anyopaque,
-    // elements: usize,
-    // capacity: usize,
+    data: ArrayList(u8),
 
     pub fn init(allocator: Allocator, desc: ComponentDesc) ComponentList {
-        return ComponentList{ .allocator = allocator, .desc = desc };
+        return ComponentList{ .desc = desc, .data = ArrayList(u8).init(allocator) };
     }
 
     pub fn deinit(self: *ComponentList) void {
-        _ = self;
+        self.data.deinit();
     }
 
-    pub fn append(self: *ComponentList) !void {
-        _ = self;
+    pub fn append(self: *ComponentList, comptime T: type, component: T) !void {
+        const data: [*]const u8 = @ptrCast(&component);
+        try self.data.appendSlice(data[0..@sizeOf(T)]);
+    }
+
+    pub fn appendRaw(self: *ComponentList, component: []u8) !void {
+        try self.data.appendSlice(component);
+    }
+
+    fn swapRemoveRaw(self: *ComponentList, index: usize, dest: *[]u8) void {
+        const typeSize = self.desc.size;
+        var i = typeSize;
+        while (i > 0) {
+            dest.*[i - 1] = self.data.swapRemove(index * typeSize + i - 1);
+            i -= 1;
+        }
+    }
+
+    pub fn get(self: *ComponentList, comptime T: type, index: usize) ?*const T {
+        const typeSize = self.desc.size;
+        const data = self.data.items.ptr + index * typeSize;
+        return @as(*const T, @alignCast(@ptrCast(data)));
+    }
+
+    pub fn getMut(self: *ComponentList, comptime T: type, index: usize) ?*T {
+        const typeSize = self.desc.size;
+        const data = self.data.items.ptr + index * typeSize;
+        return @as(*T, @alignCast(@ptrCast(data)));
     }
 };
 
@@ -80,8 +103,8 @@ const Archetype = struct {
 
     pub fn addEntity(self: *Archetype, entity: ecs.Entity) !void {
         try self.entities.append(entity);
-        for (0..self.components.items.len) |i| {
-            try self.components.items[i].append();
+        for (self.components.items) |*list| {
+            try list.append(void, {});
         }
     }
 
@@ -127,8 +150,42 @@ pub const Storage = struct {
         _ = self;
     }
 
+    fn findArchetype(self: *Storage, entity: ecs.Entity) ?struct { index: usize, archetype: *Archetype } {
+        for (0..self.archetypes.items.len) |i| {
+            if (self.archetypes.items[i].hasEntity(entity)) |value| {
+                return .{ .index = value, .archetype = &self.archetypes.items[i] };
+            }
+        }
+        return null;
+    }
+
+    pub fn get(self: *Storage, comptime T: type, entity: ecs.Entity) ?*const T {
+        const location = self.findArchetype(entity).?;
+        const source = location.archetype;
+        const index = location.index;
+
+        for (source.components.items) |*list| {
+            if (@intFromPtr(list.desc.name.ptr) == @intFromPtr(@typeName(T))) {
+                return list.get(T, index);
+            }
+        }
+        return null;
+    }
+
+    pub fn getMut(self: *Storage, comptime T: type, entity: ecs.Entity) ?*T {
+        const location = self.findArchetype(entity).?;
+        const source = location.archetype;
+        const index = location.index;
+
+        for (source.components.items) |*list| {
+            if (@intFromPtr(list.desc.name.ptr) == @intFromPtr(@typeName(T))) {
+                return list.getMut(T, index);
+            }
+        }
+        return null;
+    }
+
     pub fn setComponents(self: *Storage, entity: ecs.Entity, comptime T: type, arg: T) !void {
-        _ = arg;
         // Find Archetype of the Entity
         var entityIdx: usize = undefined;
         var source: ?*Archetype = null;
@@ -169,15 +226,19 @@ pub const Storage = struct {
 
         // Move entity
         try destination.?.entities.append(source.?.entities.swapRemove(entityIdx));
+
         var i: usize = 0;
         var j: usize = 0;
         while (j < destination.?.components.items.len) {
             if (@intFromPtr(destination.?.components.items[j].desc.name.ptr) != @intFromPtr(@typeName(T))) {
-                // _ = source.?.components.items[j].swapRemove(entityIdx);
-                // try destination.?.components.append(source.?.components.items[i]);
+                var data = try self.allocator.alloc(u8, source.?.components.items[i].desc.size);
+                defer self.allocator.free(data);
+                source.?.components.items[i].swapRemoveRaw(entityIdx, &data);
+                try destination.?.components.items[j].appendRaw(data);
+
                 i += 1;
             } else {
-                try destination.?.components.items[j].append();
+                try destination.?.components.items[j].append(T, arg);
             }
             j += 1;
         }
