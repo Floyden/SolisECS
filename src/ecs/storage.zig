@@ -187,21 +187,15 @@ pub const Storage = struct {
 
     pub fn setComponents(self: *Storage, entity: ecs.Entity, comptime T: type, arg: T) !void {
         // Find Archetype of the Entity
-        var entityIdx: usize = undefined;
-        var source: ?*Archetype = null;
-        for (0..self.archetypes.items.len) |i| {
-            if (self.archetypes.items[i].hasEntity(entity)) |value| {
-                entityIdx = value;
-                source = &self.archetypes.items[i];
-                break;
-            }
-        }
-        // Entity was not found
-        std.debug.assert(source != null);
+        const location = self.findArchetype(entity);
+        std.debug.assert(location != null);
+
+        const entityIdx = location.?.index;
+        var source = location.?.archetype;
 
         // Find new destination
         var destination: ?*Archetype = null;
-        for (source.?.addTypeEdges.items) |edge| {
+        for (source.addTypeEdges.items) |edge| {
             if (@intFromPtr(edge.typeName.ptr) == @intFromPtr(@typeName(T))) {
                 destination = edge.to;
                 break;
@@ -210,37 +204,35 @@ pub const Storage = struct {
 
         // Create new Archetype if the destination is not found
         if (destination == null) {
-            var types = try self.allocator.alloc(ComponentDesc, source.?.components.items.len + 1);
+            var types = try self.allocator.alloc(ComponentDesc, source.components.items.len + 1);
             defer self.allocator.free(types);
-            for (source.?.components.items, 0..) |list, i| {
+            for (source.components.items, 0..) |list, i| {
                 types.ptr[i] = list.desc;
             }
-            types[source.?.components.items.len] = ComponentDesc{ .size = @sizeOf(T), .alignment = @alignOf(T), .name = @typeName(T) };
+            types[source.components.items.len] = ComponentDesc{ .size = @sizeOf(T), .alignment = @alignOf(T), .name = @typeName(T) };
 
             try self.archetypes.append(try Archetype.init(self.allocator, types));
             var dest = &self.archetypes.items[self.archetypes.items.len - 1];
-            try dest.removeTypeEdges.append(ArchetypeEdge{ .from = dest, .to = source.?, .typeName = @typeName(T) });
-            try source.?.addTypeEdges.append(ArchetypeEdge{ .from = source.?, .to = dest, .typeName = @typeName(T) });
+            try dest.removeTypeEdges.append(ArchetypeEdge{ .from = dest, .to = source, .typeName = @typeName(T) });
+            try source.addTypeEdges.append(ArchetypeEdge{ .from = source, .to = dest, .typeName = @typeName(T) });
             destination = dest;
         }
 
         // Move entity
-        try destination.?.entities.append(source.?.entities.swapRemove(entityIdx));
+        try destination.?.entities.append(source.entities.swapRemove(entityIdx));
 
         var i: usize = 0;
-        var j: usize = 0;
-        while (j < destination.?.components.items.len) {
-            if (@intFromPtr(destination.?.components.items[j].desc.name.ptr) != @intFromPtr(@typeName(T))) {
-                var data = try self.allocator.alloc(u8, source.?.components.items[i].desc.size);
+        for (destination.?.components.items) |*component| {
+            if (@intFromPtr(component.desc.name.ptr) != @intFromPtr(@typeName(T))) {
+                var data = try self.allocator.alloc(u8, source.components.items[i].desc.size);
                 defer self.allocator.free(data);
-                source.?.components.items[i].swapRemoveRaw(entityIdx, &data);
-                try destination.?.components.items[j].appendRaw(data);
+                source.components.items[i].swapRemoveRaw(entityIdx, &data);
+                try component.appendRaw(data);
 
                 i += 1;
             } else {
-                try destination.?.components.items[j].append(T, arg);
+                try component.append(T, arg);
             }
-            j += 1;
         }
     }
 };
