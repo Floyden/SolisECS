@@ -5,11 +5,11 @@ const Position = struct { x: f32, y: f32 };
 const Velocity = struct { x: f32, y: f32 };
 
 pub fn Move(iter: *ecs.Iter) void {
-    std.log.info("Hello Move", .{});
     while (iter.next()) |*tuple| {
         var position = tuple.getMut(Position, 0);
         const velocity = tuple.get(Velocity, 1);
         position.x += velocity.x;
+        position.y += velocity.y;
     }
 }
 
