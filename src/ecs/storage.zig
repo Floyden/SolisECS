@@ -14,10 +14,10 @@ fn GetTypeId(comptime T: type) TypeId {
 
 pub const ComponentList = struct {
     desc: ComponentDesc,
-    data: ArrayList(u8),
+    data: ArrayList(usize),
 
     pub fn init(allocator: Allocator, desc: ComponentDesc) ComponentList {
-        return ComponentList{ .desc = desc, .data = ArrayList(u8).init(allocator) };
+        return ComponentList{ .desc = desc, .data = ArrayList(usize).init(allocator) };
     }
 
     pub fn deinit(self: *ComponentList) void {
@@ -25,32 +25,33 @@ pub const ComponentList = struct {
     }
 
     pub fn append(self: *ComponentList, comptime T: type, component: T) !void {
-        const data: [*]const u8 = @ptrCast(&component);
-        try self.data.appendSlice(data[0..@sizeOf(T)]);
+        const data: [*]const usize = @alignCast(@ptrCast(&component));
+        const size = std.math.divCeil(usize, self.desc.size, @sizeOf(usize)) catch unreachable;
+        try self.data.appendSlice(data[0..size]);
     }
 
-    pub fn appendRaw(self: *ComponentList, component: []u8) !void {
+    pub fn appendRaw(self: *ComponentList, component: []usize) !void {
         try self.data.appendSlice(component);
     }
 
-    fn swapRemoveRaw(self: *ComponentList, index: usize, dest: *[]u8) void {
-        const typeSize = self.desc.size;
-        var i = typeSize;
+    fn swapRemoveRaw(self: *ComponentList, index: usize, dest: *[]usize) void {
+        const size = std.math.divCeil(usize, self.desc.size, @sizeOf(usize)) catch unreachable;
+        var i = size;
         while (i > 0) {
-            dest.*[i - 1] = self.data.swapRemove(index * typeSize + i - 1);
             i -= 1;
+            dest.*[i] = self.data.swapRemove(index * size + i);
         }
     }
 
     pub fn get(self: *ComponentList, comptime T: type, index: usize) ?*const T {
-        const typeSize = self.desc.size;
-        const data = self.data.items.ptr + index * typeSize;
+        const offset = std.math.divCeil(usize, self.desc.size, @sizeOf(usize)) catch unreachable;
+        const data = self.data.items.ptr + index * offset;
         return @as(*const T, @alignCast(@ptrCast(data)));
     }
 
     pub fn getMut(self: *ComponentList, comptime T: type, index: usize) ?*T {
-        const typeSize = self.desc.size;
-        const data = self.data.items.ptr + index * typeSize;
+        const offset = std.math.divCeil(usize, self.desc.size, @sizeOf(usize)) catch unreachable;
+        const data = self.data.items.ptr + index * offset;
         return @as(*T, @alignCast(@ptrCast(data)));
     }
 };
@@ -239,7 +240,7 @@ pub const Storage = struct {
         var i: usize = 0;
         for (destination.?.components.items) |*component| {
             if (@intFromPtr(component.desc.name.ptr) != @intFromPtr(@typeName(T))) {
-                var data = try self.allocator.alloc(u8, source.components.items[i].desc.size);
+                var data = try self.allocator.alloc(usize, source.components.items[i].desc.size);
                 defer self.allocator.free(data);
                 source.components.items[i].swapRemoveRaw(entityIdx, &data);
                 try component.appendRaw(data);
