@@ -12,7 +12,7 @@ fn GetTypeId(comptime T: type) TypeId {
     return TypeId{ .name = @typeName(T) };
 }
 
-const ComponentList = struct {
+pub const ComponentList = struct {
     desc: ComponentDesc,
     data: ArrayList(u8),
 
@@ -61,15 +61,14 @@ const ArchetypeEdge = struct {
     typeName: [:0]const u8,
 };
 
-const Archetype = struct {
+pub const Archetype = struct {
     entities: ArrayList(ecs.Entity),
     components: ArrayList(ComponentList),
 
     addTypeEdges: ArrayList(ArchetypeEdge),
     removeTypeEdges: ArrayList(ArchetypeEdge),
 
-    fn typeLt(ctx: void, a: ComponentList, b: ComponentList) bool {
-        _ = ctx;
+    fn typeLt(_: void, a: ComponentList, b: ComponentList) bool {
         return @intFromPtr(a.desc.name.ptr) < @intFromPtr(b.desc.name.ptr);
     }
 
@@ -115,6 +114,22 @@ const Archetype = struct {
             }
         }
         return null;
+    }
+    pub fn getTypeLocation(self: *const Archetype, t: [:0]const u8) ?usize {
+        for (self.components.items, 0..) |c, i| {
+            if (@intFromPtr(c.desc.name.ptr) == @intFromPtr(t.ptr)) {
+                return i;
+            }
+        }
+        return null;
+    }
+
+    pub fn hasType(self: *const Archetype, t: [:0]const u8) bool {
+        return self.getTypeLocation(t) != null;
+    }
+
+    pub fn count(self: *const Archetype) usize {
+        return self.entities.items.len;
     }
 };
 

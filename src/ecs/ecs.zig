@@ -1,5 +1,7 @@
 const std = @import("std");
 const Storage = @import("storage.zig").Storage;
+const iter = @import("iter.zig");
+pub const Iter = iter.Iter;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 
@@ -14,20 +16,6 @@ pub const ComponentDesc = struct {
 const SystemDesc = struct {
     callback: *const fn (*Iter) void,
     params: ArrayList([:0]const u8),
-};
-
-pub const Iter = struct {
-    world: *World,
-    components: [][]anyopaque,
-    count: usize,
-
-    pub fn getFieldMut(self: *Iter, comptime T: type, loc: usize) [*]T {
-        return @as([*]T, @alignCast(@ptrCast(self.components[loc])));
-    }
-
-    pub fn getField(self: *Iter, comptime T: type, loc: usize) [*]const T {
-        return @as([*]T, @alignCast(@ptrCast(self.components[loc])));
-    }
 };
 
 pub const World = struct {
@@ -86,7 +74,11 @@ pub const World = struct {
     }
 
     pub fn step(self: *World) void {
-        _ = self;
+        for (self.systems.items) |*system| {
+            var it = Iter.init(self.allocator, self, system.params.items) catch unreachable;
+            system.callback(&it);
+            it.deinit();
+        }
     }
 
     pub fn create(self: *World) !Entity {
