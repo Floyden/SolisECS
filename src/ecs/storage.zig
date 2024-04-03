@@ -30,7 +30,7 @@ pub const ComponentList = struct {
         try self.data.appendSlice(data[0..size]);
     }
 
-    pub fn appendRaw(self: *ComponentList, component: []usize) !void {
+    pub fn appendRaw(self: *ComponentList, component: []const usize) !void {
         try self.data.appendSlice(component);
     }
 
@@ -40,6 +40,15 @@ pub const ComponentList = struct {
         while (i > 0) {
             i -= 1;
             dest.*[i] = self.data.swapRemove(index * size + i);
+        }
+    }
+
+    fn swapDelete(self: *ComponentList, index: usize) void {
+        const size = std.math.divCeil(usize, self.desc.size, @sizeOf(usize)) catch unreachable;
+        var i = size;
+        while (i > 0) {
+            i -= 1;
+            _ = self.data.swapRemove(index * size + i);
         }
     }
 
@@ -53,6 +62,10 @@ pub const ComponentList = struct {
         const offset = std.math.divCeil(usize, self.desc.size, @sizeOf(usize)) catch unreachable;
         const count = self.data.items.len / offset;
         return @as([*]T, @alignCast(@ptrCast(self.data.items.ptr)))[0..count];
+    }
+
+    pub fn getSingleRaw(self: *ComponentList, index: usize) []const usize {
+        return @as([*]usize, @alignCast(@ptrCast(self.data.items.ptr)))[index .. index + 1];
     }
 };
 
@@ -116,6 +129,17 @@ pub const Archetype = struct {
         }
         return null;
     }
+
+    pub fn removeEntity(self: *Archetype, entity: ecs.Entity) void {
+        const index = self.hasEntity(entity);
+        if (index == null) return;
+
+        for (self.components.items) |*component| {
+            component.swapDelete(index.?);
+        }
+        _ = self.entities.swapRemove(index.?);
+    }
+
     pub fn getTypeLocation(self: *const Archetype, t: [:0]const u8) ?usize {
         for (self.components.items, 0..) |c, i| {
             if (@intFromPtr(c.desc.name.ptr) == @intFromPtr(t.ptr)) {
@@ -235,20 +259,16 @@ pub const Storage = struct {
         }
 
         // Move entity
-        try destination.?.entities.append(source.entities.swapRemove(entityIdx));
+        try destination.?.entities.append(entity);
 
-        var i: usize = 0;
         for (destination.?.components.items) |*component| {
-            if (@intFromPtr(component.desc.name.ptr) != @intFromPtr(@typeName(T))) {
-                var data = try self.allocator.alloc(usize, source.components.items[i].desc.size / @sizeOf(usize));
-                defer self.allocator.free(data);
-                source.components.items[i].swapRemoveRaw(entityIdx, &data);
-                try component.appendRaw(data);
-
-                i += 1;
-            } else {
+            const index = source.getTypeLocation(component.desc.name);
+            if (index == null) {
                 try component.append(T, arg);
+                continue;
             }
+            try component.appendRaw(source.components.items[index.?].getSingleRaw(entityIdx));
         }
+        source.removeEntity(entity);
     }
 };
