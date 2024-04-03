@@ -31,7 +31,7 @@ pub fn main() !void {
     try world.step();
 
     const pos = world.get(foo, Position);
+    std.debug.assert(pos.?.x == 1.0 and pos.?.y == 0.0);
     const pos2 = world.get(bar, Position);
-    std.log.info("New Position 1: {?}", .{pos});
-    std.log.info("New Position 2: {?}", .{pos2});
+    std.debug.assert(pos2.?.x == 5.0 and pos2.?.y == 5.0);
 }
