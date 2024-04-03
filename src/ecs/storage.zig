@@ -43,16 +43,16 @@ pub const ComponentList = struct {
         }
     }
 
-    pub fn get(self: *ComponentList, comptime T: type, index: usize) ?*const T {
+    pub fn get(self: *ComponentList, comptime T: type) []const T {
         const offset = std.math.divCeil(usize, self.desc.size, @sizeOf(usize)) catch unreachable;
-        const data = self.data.items.ptr + index * offset;
-        return @as(*const T, @alignCast(@ptrCast(data)));
+        const count = self.data.items.len / offset;
+        return @as([*]const T, @alignCast(@ptrCast(self.data.items.ptr)))[0..count];
     }
 
-    pub fn getMut(self: *ComponentList, comptime T: type, index: usize) ?*T {
+    pub fn getMut(self: *ComponentList, comptime T: type) []T {
         const offset = std.math.divCeil(usize, self.desc.size, @sizeOf(usize)) catch unreachable;
-        const data = self.data.items.ptr + index * offset;
-        return @as(*T, @alignCast(@ptrCast(data)));
+        const count = self.data.items.len / offset;
+        return @as([*]T, @alignCast(@ptrCast(self.data.items.ptr)))[0..count];
     }
 };
 
@@ -182,7 +182,7 @@ pub const Storage = struct {
 
         for (source.components.items) |*list| {
             if (@intFromPtr(list.desc.name.ptr) == @intFromPtr(@typeName(T))) {
-                return list.get(T, index);
+                return &list.get(T)[index];
             }
         }
         return null;

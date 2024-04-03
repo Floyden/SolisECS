@@ -75,7 +75,10 @@ pub const World = struct {
 
     pub fn step(self: *World) void {
         for (self.systems.items) |*system| {
-            for (self.storage.archetypes.items) |*archetype| {
+            lArc: for (self.storage.archetypes.items) |*archetype| {
+                for (system.params.items) |param| {
+                    if (!archetype.hasType(param)) continue :lArc;
+                }
                 var it = Iter.init(self.allocator, self, archetype, system.params.items) catch unreachable;
                 system.callback(&it);
                 it.deinit();
