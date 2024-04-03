@@ -25,8 +25,13 @@ pub fn main() !void {
     try world.set(foo, Position, .{ .x = 0, .y = 0 });
     try world.set(foo, Velocity, .{ .x = 1, .y = 0 });
 
+    const bar = try world.create();
+    try world.set(bar, Position, .{ .x = 3, .y = 2 });
+    try world.set(bar, Velocity, .{ .x = 2, .y = 3 });
     world.step();
 
     const pos = world.get(foo, Position);
-    std.log.info("New Position: {?}", .{pos});
+    const pos2 = world.get(bar, Position);
+    std.log.info("New Position 1: {?}", .{pos});
+    std.log.info("New Position 2: {?}", .{pos2});
 }
