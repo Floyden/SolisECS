@@ -240,7 +240,7 @@ pub const Storage = struct {
         var i: usize = 0;
         for (destination.?.components.items) |*component| {
             if (@intFromPtr(component.desc.name.ptr) != @intFromPtr(@typeName(T))) {
-                var data = try self.allocator.alloc(usize, source.components.items[i].desc.size);
+                var data = try self.allocator.alloc(usize, source.components.items[i].desc.size / @sizeOf(usize));
                 defer self.allocator.free(data);
                 source.components.items[i].swapRemoveRaw(entityIdx, &data);
                 try component.appendRaw(data);
