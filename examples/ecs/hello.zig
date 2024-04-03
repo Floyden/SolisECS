@@ -5,11 +5,12 @@ const Position = struct { x: f32, y: f32 };
 const Velocity = struct { x: f32, y: f32 };
 
 pub fn Move(iter: *ecs.Iter) void {
-    var position = iter.getMut(Position, 0);
+    const position = iter.getMut(Position, 0);
     const velocity = iter.get(Velocity, 1);
-    for (0..position.len) |i| {
-        position[i].x += velocity[i].x;
-        position[i].y += velocity[i].y;
+
+    for (position, velocity) |*pos, vel| {
+        pos.x += vel.x;
+        pos.y += vel.y;
     }
 }
 
