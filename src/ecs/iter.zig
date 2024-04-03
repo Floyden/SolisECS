@@ -22,59 +22,37 @@ pub const ComponentTuple = struct {
 
 pub const Iter = struct {
     world: *World,
-    archetypes: ArrayList(*const Archetype),
-    types: ArrayList([:0]const u8),
-    currentArchetype: usize,
+    archetype: *Archetype,
+    types: [][:0]const u8,
     currentIndex: usize,
 
     componentPtrs: ArrayList(*anyopaque),
 
-    pub fn init(allocator: Allocator, world: *World, _types: [][:0]const u8) !Iter {
-        var types = ArrayList([:0]const u8).init(allocator);
-        for (_types) |t| {
-            try types.append(t);
-        }
-
-        var archetypes = ArrayList(*const Archetype).init(allocator);
-        outer: for (world.storage.archetypes.items) |*archetype| {
-            for (types.items) |t| {
-                if (!archetype.hasType(t)) continue :outer;
-            }
-
-            try archetypes.append(archetype);
-        }
+    pub fn init(allocator: Allocator, world: *World, archetype: *Archetype, types: [][:0]const u8) !Iter {
         var componentPtrs = ArrayList(*anyopaque).init(allocator);
-        try componentPtrs.resize(types.items.len);
+        try componentPtrs.resize(types.len);
 
-        return Iter{ .world = world, .archetypes = archetypes, .types = types, .currentArchetype = 0, .currentIndex = 0, .componentPtrs = componentPtrs };
+        return Iter{ .world = world, .archetype = archetype, .types = types, .currentIndex = 0, .componentPtrs = componentPtrs };
     }
 
     pub fn deinit(self: Iter) void {
         self.componentPtrs.deinit();
-        self.types.deinit();
-        self.archetypes.deinit();
     }
 
     pub fn next(self: *Iter) ?ComponentTuple {
-        if (self.archetypes.items.len == 0) return null;
-        if (self.currentIndex >= self.archetypes.items[self.currentArchetype].count()) {
-            self.currentIndex = 0;
-            self.currentArchetype += 1;
-        }
-        if (self.currentArchetype >= self.archetypes.items.len) {
+        if (self.currentIndex >= self.archetype.count()) {
             return null;
         }
 
-        const currentArchetype = self.archetypes.items[self.currentArchetype];
-        for (0..self.types.items.len) |i| {
-            const typeIndex = self.types.items[i];
-            var index = currentArchetype.getTypeLocation(typeIndex);
+        for (0..self.types.len) |i| {
+            const typeIndex = self.types[i];
+            var index = self.archetype.getTypeLocation(typeIndex);
             if (index == null) {
                 std.debug.print("Unexpected end of iterator", .{});
                 return null;
             }
             index = index.?;
-            self.componentPtrs.items[i] = &currentArchetype.components.items[index.?];
+            self.componentPtrs.items[i] = &self.archetype.components.items[index.?];
         }
 
         defer self.currentIndex += 1; // Update index after setting it in the tuple
