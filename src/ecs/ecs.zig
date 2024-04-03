@@ -84,9 +84,8 @@ pub const World = struct {
                 try query.addArchetype(archetype);
             }
             for (0..query.archetypes.items.len) |i| {
-                var it = try query.iter(i);
+                var it = query.iter(i);
                 system.callback(&it);
-                it.deinit();
             }
         }
     }
