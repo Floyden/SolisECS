@@ -28,7 +28,7 @@ pub fn main() !void {
     const bar = try world.create();
     try world.set(bar, Position, .{ .x = 3, .y = 2 });
     try world.set(bar, Velocity, .{ .x = 2, .y = 3 });
-    world.step();
+    try world.step();
 
     const pos = world.get(foo, Position);
     const pos2 = world.get(bar, Position);

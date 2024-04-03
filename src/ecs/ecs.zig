@@ -2,6 +2,7 @@ const std = @import("std");
 const Storage = @import("storage.zig").Storage;
 const iter = @import("iter.zig");
 pub const Iter = iter.Iter;
+pub const Query = iter.Query;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 
@@ -73,13 +74,17 @@ pub const World = struct {
         try self.systems.append(desc);
     }
 
-    pub fn step(self: *World) void {
+    pub fn step(self: *World) !void {
         for (self.systems.items) |*system| {
+            var query = try Query.init(self.allocator, self, system.params.items);
             lArc: for (self.storage.archetypes.items) |*archetype| {
                 for (system.params.items) |param| {
                     if (!archetype.hasType(param)) continue :lArc;
                 }
-                var it = Iter.init(self.allocator, self, archetype, system.params.items) catch unreachable;
+                try query.addArchetype(archetype);
+            }
+            for (0..query.archetypes.items.len) |i| {
+                var it = try query.iter(i);
                 system.callback(&it);
                 it.deinit();
             }
