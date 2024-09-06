@@ -20,7 +20,7 @@ pub const ComponentList = struct {
         return ComponentList{ .desc = desc, .data = ArrayList(usize).init(allocator) };
     }
 
-    pub fn deinit(self: *ComponentList) void {
+    pub fn deinit(self: *const ComponentList) void {
         self.data.deinit();
     }
 
@@ -168,7 +168,7 @@ pub const Storage = struct {
         return Storage{ .allocator = allocator, .archetypes = archetypes };
     }
 
-    pub fn deinit(self: *Storage) void {
+    pub fn deinit(self: *const Storage) void {
         for (self.archetypes.items) |*list| {
             list.deinit();
         }

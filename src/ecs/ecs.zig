@@ -36,7 +36,7 @@ pub const World = struct {
         };
     }
 
-    pub fn deinit(self: *World) void {
+    pub fn deinit(self: *const World) void {
         for (self.systems.items) |system| {
             system.params.deinit();
         }
