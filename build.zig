@@ -6,7 +6,7 @@ pub fn build(b: *std.Build) void {
 
     const lib = b.addStaticLibrary(.{
         .name = "Solis",
-        .root_source_file = .{ .path = "src/root.zig" },
+        .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -18,7 +18,7 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "Solis",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -55,7 +55,7 @@ pub fn build(b: *std.Build) void {
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
     const lib_unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/root.zig" },
+        .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -63,7 +63,7 @@ pub fn build(b: *std.Build) void {
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 
     const exe_unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -89,13 +89,13 @@ pub fn buildExample(
 ) void {
     const exe = builder.addExecutable(.{
         .name = name,
-        .root_source_file = .{ .path = builder.fmt("examples/{s}", .{path}) },
+        .root_source_file = builder.path(builder.fmt("examples/{s}", .{path})),
         .target = target,
         .optimize = optimize,
     });
     exe.linkSystemLibrary("c");
     builder.installArtifact(exe);
-    exe.root_module.addImport("ecs", builder.createModule(.{ .root_source_file = .{ .path = "src/ecs/ecs.zig" } }));
+    exe.root_module.addImport("ecs", builder.createModule(.{ .root_source_file = builder.path("src/ecs/ecs.zig") }));
 
     const run_cmd = builder.addRunArtifact(exe);
 
