@@ -4,17 +4,17 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const lib = b.addStaticLibrary(.{
-        .name = "Solis",
-        .root_source_file = b.path("src/root.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    // const lib = b.addStaticLibrary(.{
+    //     .name = "Solis",
+    //     .root_source_file = b.path("src/root.zig"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
 
     // This declares intent for the library to be installed into the standard
     // location when the user invokes the "install" step (the default step when
     // running `zig build`).
-    b.installArtifact(lib);
+    // b.installArtifact(lib);
 
     const exe = b.addExecutable(.{
         .name = "Solis",
@@ -87,6 +87,15 @@ pub fn buildExample(
     path: []const u8,
     name: []const u8,
 ) void {
+    const raylib_dep = builder.dependency("raylib-zig", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const raylib = raylib_dep.module("raylib"); // main raylib module
+    const raygui = raylib_dep.module("raygui"); // raygui module
+    const raylib_artifact = raylib_dep.artifact("raylib"); // raylib C library
+
     const exe = builder.addExecutable(.{
         .name = name,
         .root_source_file = builder.path(builder.fmt("examples/{s}", .{path})),
@@ -96,6 +105,10 @@ pub fn buildExample(
     exe.linkSystemLibrary("c");
     builder.installArtifact(exe);
     exe.root_module.addImport("ecs", builder.createModule(.{ .root_source_file = builder.path("src/ecs/ecs.zig") }));
+
+    exe.linkLibrary(raylib_artifact);
+    exe.root_module.addImport("raylib", raylib);
+    exe.root_module.addImport("raygui", raygui);
 
     const run_cmd = builder.addRunArtifact(exe);
 
