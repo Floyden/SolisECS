@@ -78,6 +78,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_exe_unit_tests.step);
 
     buildExample(b, target, optimize, "ecs/hello.zig", "hello_ecs");
+    buildExample(b, target, optimize, "window.zig", "window");
 }
 
 pub fn buildExample(

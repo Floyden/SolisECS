@@ -3,6 +3,7 @@ const ecs = @import("ecs");
 
 const Position = struct { x: f32, y: f32 };
 const Velocity = struct { x: f32, y: f32 };
+const Tag = struct {};
 
 pub fn Move(iter: *ecs.Iter) void {
     const position = iter.getMut(Position, 0);
@@ -29,6 +30,7 @@ pub fn main() !void {
     const bar = try world.create();
     try world.set(bar, Position, .{ .x = 3, .y = 2 });
     try world.set(bar, Velocity, .{ .x = 2, .y = 3 });
+    try world.set(bar, Tag, .{});
     try world.step();
 
     const pos = world.get(foo, Position);
