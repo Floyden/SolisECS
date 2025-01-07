@@ -10,7 +10,7 @@ pub fn EventWriter(comptime T: type) type {
             return Self{ .events = events };
         }
 
-        pub fn write(self: *Self, event: T) Allocator.Error!void {
+        pub fn write(self: Self, event: T) Allocator.Error!void {
             try self.events.pushEvent(event);
         }
     };

@@ -1,6 +1,6 @@
 const std = @import("std");
 const rl = @import("raylib");
-const events = @import("events.zig");
+const events = @import("events");
 
 const TileType = enum(u8) {
     Empty,
@@ -47,6 +47,7 @@ const Field = struct {
     pub fn render(self: Field, posX: i32, posY: i32) void {
         const pos_x: f32 = @floatFromInt(posX);
         const pos_y: f32 = @floatFromInt(posY);
+        const font = rl.getFontDefault();
         for (self.tiles.items, 0..) |tile, idx| {
             const pos: i32 = @intCast(idx);
             const x: f32 = @floatFromInt(@mod(pos, self.width));
@@ -58,14 +59,41 @@ const Field = struct {
                 TileType.Grass => value = "#",
                 TileType.Road => value = "=",
             }
-            rl.drawTextEx(rl.getFontDefault(), value, rl.Vector2{ .x = (pos_x + x) * self.size, .y = (pos_y + y) * self.size }, self.size, 0, tile.color);
+            const offset_x = (self.size - @as(f32, @floatFromInt(font.glyphs[value[0]].image.width))) / 2.0;
+            const offset_y = (self.size - @as(f32, @floatFromInt(font.glyphs[value[0]].image.height))) / 2.0;
+            rl.drawTextEx(font, value, rl.Vector2{ .x = (pos_x + x) * self.size + offset_x, .y = (pos_y + y) * self.size + offset_y }, self.size, 0, tile.color);
         }
     }
 
-    pub fn drawPlayer(self: Field, x: i32, y: i32) void {
-        rl.drawTextEx(rl.getFontDefault(), "*", rl.Vector2{ .x = @as(f32, @floatFromInt(x)) * self.size, .y = @as(f32, @floatFromInt(y)) * self.size }, self.size, 0, rl.Color.brown);
+    pub fn drawCursor(self: Field, x: i32, y: i32) void {
+        const posX: f32 = @floatFromInt(x);
+        const posY: f32 = @floatFromInt(y);
+        rl.drawRectangleLinesEx(rl.Rectangle{ .x = posX * self.size, .y = posY * self.size, .width = self.size, .height = self.size }, 1.0, rl.Color.black);
     }
 };
+
+const KeyInput = struct {
+    key: rl.KeyboardKey,
+    pressed: bool,
+};
+
+pub fn handleInputEvents(writer: events.EventWriter(KeyInput)) void {
+    var key = rl.getKeyPressed();
+    while (key != rl.KeyboardKey.null) : (key = rl.getKeyPressed())
+        writer.write(KeyInput{ .key = key, .pressed = true }) catch unreachable;
+}
+
+pub fn playerInput(reader: *events.EventReader(KeyInput), pos: *[2]i32) void {
+    while (reader.next()) |event| {
+        switch (event.key) {
+            rl.KeyboardKey.d => pos[0] += 1,
+            rl.KeyboardKey.a => pos[0] -= 1,
+            rl.KeyboardKey.s => pos[1] += 1,
+            rl.KeyboardKey.w => pos[1] -= 1,
+            else => {},
+        }
+    }
+}
 
 pub fn main() !void {
     rl.initWindow(800, 600, "Hi");
@@ -94,30 +122,28 @@ pub fn main() !void {
     }
 
     var pos: [2]i32 = .{ 0, 3 };
+    var keyEvents = events.Events(KeyInput).init(std.heap.page_allocator);
+    var reader = keyEvents.reader();
+    const writer = keyEvents.writer();
+
+    const font = rl.getFontDefault();
+    std.debug.print("{} {?}\n ", .{ font.baseSize, font.glyphs['#'].image.height });
 
     rl.setTargetFPS(30);
     while (!rl.windowShouldClose()) {
+        handleInputEvents(writer);
+
+        playerInput(&reader, &pos);
+
         canvasLayers[0].begin();
 
         rl.clearBackground(rl.Color.white);
-        if (rl.isKeyPressed(rl.KeyboardKey.d)) {
-            pos[0] += 1;
-        }
-        if (rl.isKeyPressed(rl.KeyboardKey.a)) {
-            pos[0] -= 1;
-        }
-        if (rl.isKeyPressed(rl.KeyboardKey.w)) {
-            pos[1] -= 1;
-        }
-        if (rl.isKeyPressed(rl.KeyboardKey.s)) {
-            pos[1] += 1;
-        }
 
         field.render(0, 0);
         canvasLayers[0].end();
         canvasLayers[1].begin();
         rl.clearBackground(rl.Color.fromInt(0));
-        field.drawPlayer(pos[0], pos[1]);
+        field.drawCursor(pos[0], pos[1]);
         canvasLayers[1].end();
         rl.beginDrawing();
         for (canvasLayers) |canvas| {
