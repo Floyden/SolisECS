@@ -6,6 +6,14 @@ const TileType = enum(u8) {
     Empty,
     Grass,
     Road,
+
+    pub fn asChar(self: TileType) u8 {
+        switch (self) {
+            TileType.Empty => return ' ',
+            TileType.Grass => return '#',
+            TileType.Road => return '=',
+        }
+    }
 };
 
 const Tile = struct {
@@ -48,20 +56,24 @@ const Field = struct {
         const pos_x: f32 = @floatFromInt(posX);
         const pos_y: f32 = @floatFromInt(posY);
         const font = rl.getFontDefault();
-        for (self.tiles.items, 0..) |tile, idx| {
-            const pos: i32 = @intCast(idx);
-            const x: f32 = @floatFromInt(@mod(pos, self.width));
-            const y: f32 = @floatFromInt(@divTrunc(pos, self.width));
+        var pos: f32 = 0.0;
+        for (self.tiles.items) |tile| {
+            defer pos += 1.0;
 
-            var value: u8 = undefined;
-            switch (tile.type) {
-                TileType.Empty => value = ' ',
-                TileType.Grass => value = '#',
-                TileType.Road => value = '=',
-            }
+            const width: f32 = @floatFromInt(self.width);
+            const x: f32 = @mod(pos, width);
+            const y: f32 = @divTrunc(pos, width);
+
+            const value: u8 = tile.type.asChar();
             const offset_x = (self.size - @as(f32, @floatFromInt(font.glyphs[value].image.width))) / 2.0;
             const offset_y = (self.size - @as(f32, @floatFromInt(font.glyphs[value].image.height))) / 2.0;
-            rl.drawTextCodepoint(font, value, rl.Vector2{ .x = (pos_x + x) * self.size + offset_x, .y = (pos_y + y) * self.size + offset_y }, self.size, tile.color);
+            rl.drawTextCodepoint(
+                font,
+                value,
+                rl.Vector2{ .x = (pos_x + x) * self.size + offset_x, .y = (pos_y + y) * self.size + offset_y },
+                self.size,
+                tile.color,
+            );
         }
     }
 
