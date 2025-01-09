@@ -84,6 +84,29 @@ const Field = struct {
     }
 };
 
+const FieldCursor = struct {
+    pos: [2]i32,
+    selection: ?[2]i32,
+    field: *Field,
+
+    pub fn new(field: *Field) FieldCursor {
+        return .{ .pos = [_]i32{ 0, 0 }, .selection = null, .field = field };
+    }
+
+    pub fn render(self: FieldCursor) void {
+        const size = self.field.size;
+
+        if (self.selection) |select| {
+            const selectX: f32 = @floatFromInt(select[0]);
+            const selectY: f32 = @floatFromInt(select[1]);
+            rl.drawRectangleLinesEx(rl.Rectangle{ .x = selectX * size, .y = selectY * size, .width = size, .height = size }, 1.0, rl.Color.green);
+        }
+        const posX: f32 = @floatFromInt(self.pos[0]);
+        const posY: f32 = @floatFromInt(self.pos[1]);
+        rl.drawRectangleLinesEx(rl.Rectangle{ .x = posX * size, .y = posY * size, .width = size, .height = size }, 1.0, rl.Color.black);
+    }
+};
+
 const KeyInput = struct {
     key: rl.KeyboardKey,
     pressed: bool,
@@ -95,13 +118,21 @@ pub fn handleInputEvents(writer: events.EventWriter(KeyInput)) void {
         writer.write(KeyInput{ .key = key, .pressed = true }) catch unreachable;
 }
 
-pub fn playerInput(reader: *events.EventReader(KeyInput), pos: *[2]i32) void {
+pub fn playerInput(reader: *events.EventReader(KeyInput), cursor: *FieldCursor) void {
     while (reader.next()) |event| {
         switch (event.key) {
-            rl.KeyboardKey.d => pos[0] += 1,
-            rl.KeyboardKey.a => pos[0] -= 1,
-            rl.KeyboardKey.s => pos[1] += 1,
-            rl.KeyboardKey.w => pos[1] -= 1,
+            rl.KeyboardKey.d => cursor.pos[0] += 1,
+            rl.KeyboardKey.a => cursor.pos[0] -= 1,
+            rl.KeyboardKey.s => cursor.pos[1] += 1,
+            rl.KeyboardKey.w => cursor.pos[1] -= 1,
+            rl.KeyboardKey.space => {
+                if (cursor.selection) |_| {
+                    // Do something with cursor
+                    cursor.selection = null;
+                } else {
+                    cursor.selection = cursor.pos;
+                }
+            },
             else => {},
         }
     }
@@ -133,19 +164,16 @@ pub fn main() !void {
         }
     }
 
-    var pos: [2]i32 = .{ 0, 3 };
+    var cursor = FieldCursor.new(&field);
     var keyEvents = events.Events(KeyInput).init(std.heap.page_allocator);
     var reader = keyEvents.reader();
     const writer = keyEvents.writer();
-
-    const font = rl.getFontDefault();
-    std.debug.print("{} {?}\n ", .{ font.baseSize, font.glyphs['#'].image.height });
 
     rl.setTargetFPS(30);
     while (!rl.windowShouldClose()) {
         handleInputEvents(writer);
 
-        playerInput(&reader, &pos);
+        playerInput(&reader, &cursor);
 
         canvasLayers[0].begin();
 
@@ -155,7 +183,7 @@ pub fn main() !void {
         canvasLayers[0].end();
         canvasLayers[1].begin();
         rl.clearBackground(rl.Color.fromInt(0));
-        field.drawCursor(pos[0], pos[1]);
+        cursor.render();
         canvasLayers[1].end();
         rl.beginDrawing();
         for (canvasLayers) |canvas| {
