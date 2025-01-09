@@ -53,15 +53,15 @@ const Field = struct {
             const x: f32 = @floatFromInt(@mod(pos, self.width));
             const y: f32 = @floatFromInt(@divTrunc(pos, self.width));
 
-            var value: [*:0]const u8 = undefined;
+            var value: u8 = undefined;
             switch (tile.type) {
-                TileType.Empty => value = " ",
-                TileType.Grass => value = "#",
-                TileType.Road => value = "=",
+                TileType.Empty => value = ' ',
+                TileType.Grass => value = '#',
+                TileType.Road => value = '=',
             }
-            const offset_x = (self.size - @as(f32, @floatFromInt(font.glyphs[value[0]].image.width))) / 2.0;
-            const offset_y = (self.size - @as(f32, @floatFromInt(font.glyphs[value[0]].image.height))) / 2.0;
-            rl.drawTextEx(font, value, rl.Vector2{ .x = (pos_x + x) * self.size + offset_x, .y = (pos_y + y) * self.size + offset_y }, self.size, 0, tile.color);
+            const offset_x = (self.size - @as(f32, @floatFromInt(font.glyphs[value].image.width))) / 2.0;
+            const offset_y = (self.size - @as(f32, @floatFromInt(font.glyphs[value].image.height))) / 2.0;
+            rl.drawTextCodepoint(font, value, rl.Vector2{ .x = (pos_x + x) * self.size + offset_x, .y = (pos_y + y) * self.size + offset_y }, self.size, tile.color);
         }
     }
 
