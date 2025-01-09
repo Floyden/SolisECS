@@ -19,61 +19,74 @@ const TileType = enum(u8) {
 const Tile = struct {
     type: TileType,
     color: rl.Color,
+
+    pub fn new(tile_type: TileType, color: rl.Color) Tile {
+        return Tile{ .type = tile_type, .color = color };
+    }
 };
 
 const Field = struct {
+    const LAYER_COUNT: i32 = 2;
     width: i32,
     height: i32,
-    tiles: std.ArrayList(Tile),
+    tiles: [LAYER_COUNT]std.ArrayList(Tile),
     size: f32,
 
     pub fn init(width: i32, height: i32, allocator: std.mem.Allocator) !Field {
+        var tiles: [LAYER_COUNT]std.ArrayList(Tile) = undefined;
+        for (&tiles) |*layer| {
+            layer.* = std.ArrayList(Tile).init(allocator);
+            layer.appendNTimes(Tile.new(TileType.Empty, rl.Color.white), @intCast(width * height)) catch unreachable;
+        }
+
         return Field{
             .width = width,
             .height = height,
-            .tiles = std.ArrayList(Tile).init(allocator),
+            .tiles = tiles,
             .size = @floatFromInt(rl.getFontDefault().baseSize),
         };
     }
 
     pub fn deinit(self: *Field) void {
-        self.tiles.deinit();
+        for (self.tiles) |layer| layer.deinit();
     }
 
-    pub fn fillAll(self: *Field, tile: Tile) void {
-        self.tiles.resize(@intCast(self.width * self.height)) catch unreachable;
-        for (self.tiles.items) |*t| {
+    pub fn fillAll(self: *Field, layer: usize, tile: Tile) void {
+        std.debug.assert(layer < LAYER_COUNT);
+        for (self.tiles[layer].items) |*t| {
             t.* = tile;
         }
     }
 
-    pub fn getTileMut(self: *Field, x: usize, y: usize) *Tile {
+    pub fn getTileMut(self: *Field, layer: usize, x: usize, y: usize) *Tile {
         std.debug.assert(x < self.width and y < self.height);
-        return &self.tiles.items[x + y * @as(usize, @intCast(self.width))];
+        return &self.tiles[layer].items[x + y * @as(usize, @intCast(self.width))];
     }
 
     pub fn render(self: Field, posX: i32, posY: i32) void {
         const pos_x: f32 = @floatFromInt(posX);
         const pos_y: f32 = @floatFromInt(posY);
         const font = rl.getFontDefault();
-        var pos: f32 = 0.0;
-        for (self.tiles.items) |tile| {
-            defer pos += 1.0;
+        for (0..LAYER_COUNT) |layer| {
+            var pos: f32 = 0.0;
+            for (self.tiles[layer].items) |tile| {
+                defer pos += 1.0;
 
-            const width: f32 = @floatFromInt(self.width);
-            const x: f32 = @mod(pos, width);
-            const y: f32 = @divTrunc(pos, width);
+                const width: f32 = @floatFromInt(self.width);
+                const x: f32 = @mod(pos, width);
+                const y: f32 = @divTrunc(pos, width);
 
-            const value: u8 = tile.type.asChar();
-            const offset_x = (self.size - @as(f32, @floatFromInt(font.glyphs[value].image.width))) / 2.0;
-            const offset_y = (self.size - @as(f32, @floatFromInt(font.glyphs[value].image.height))) / 2.0;
-            rl.drawTextCodepoint(
-                font,
-                value,
-                rl.Vector2{ .x = (pos_x + x) * self.size + offset_x, .y = (pos_y + y) * self.size + offset_y },
-                self.size,
-                tile.color,
-            );
+                const value = tile.type.asChar();
+                const offset_x = (self.size - @as(f32, @floatFromInt(font.glyphs[value].image.width))) / 2.0;
+                const offset_y = (self.size - @as(f32, @floatFromInt(font.glyphs[value].image.height))) / 2.0;
+                rl.drawTextCodepoint(
+                    font,
+                    value,
+                    rl.Vector2{ .x = (pos_x + x) * self.size + offset_x, .y = (pos_y + y) * self.size + offset_y },
+                    self.size,
+                    tile.color,
+                );
+            }
         }
     }
 
@@ -150,17 +163,16 @@ pub fn main() !void {
     var field = Field.init(10, 10, std.heap.page_allocator) catch unreachable;
     defer field.deinit();
 
-    field.fillAll(Tile{ .type = TileType.Grass, .color = rl.Color.green });
+    field.fillAll(0, Tile.new(TileType.Grass, rl.Color.green));
     for (4..6) |y| {
         for (0..6) |x| {
-            field.getTileMut(x, y).type = TileType.Road;
-            field.getTileMut(x, y).color = rl.Color.yellow;
+            field.getTileMut(0, x, y).* = Tile.new(TileType.Road, rl.Color.yellow);
         }
     }
+
     for (0..4) |y| {
         for (4..6) |x| {
-            field.getTileMut(x, y).type = TileType.Road;
-            field.getTileMut(x, y).color = rl.Color.yellow;
+            field.getTileMut(0, x, y).* = Tile.new(TileType.Road, rl.Color.yellow);
         }
     }
 
