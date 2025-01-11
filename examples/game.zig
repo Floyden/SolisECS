@@ -6,19 +6,9 @@ const KeyInput = solis.input.KeyInput;
 const KeyboardState = solis.input.KeyboardState;
 const handleInputEvents = solis.input.keyboard.handleInputEvents;
 
-const TileIndex = struct {
-    const none = TileIndex{ .x = std.math.maxInt(u32), .y = std.math.maxInt(u32) };
-
-    x: u32,
-    y: u32,
-
-    pub fn new(x: u32, y: u32) TileIndex {
-        return .{ .x = x, .y = y };
-    }
-
-    pub fn is_none(self: TileIndex) bool {
-        return std.meta.eql(self, TileIndex.none);
-    }
+const TileIndex = enum(u32) {
+    none = std.math.maxInt(u32),
+    _,
 };
 
 const TileSet = struct {
@@ -40,9 +30,20 @@ const TileSet = struct {
         rl.unloadImage(self.image);
     }
 
+    fn indexAt(self: TileSet, x: u32, y: u32) TileIndex {
+        return @enumFromInt(x + y * self.columns);
+    }
+
+    fn indexPos(self: TileSet, index: TileIndex) [2]u32 {
+        std.debug.assert(index != TileIndex.none);
+        const idx = @intFromEnum(index);
+        return .{ @mod(idx, self.columns), @divTrunc(idx, self.columns) };
+    }
+
     fn drawTile(self: TileSet, index: TileIndex, posX: f32, posY: f32) void {
-        const row: f32 = @floatFromInt(index.y);
-        const column: f32 = @floatFromInt(index.x);
+        const location = self.indexPos(index);
+        const column: f32 = @floatFromInt(location[0]);
+        const row: f32 = @floatFromInt(location[1]);
         const width: f32 = @floatFromInt(self.width);
         const height: f32 = @floatFromInt(self.height);
         rl.drawTextureRec(
@@ -101,7 +102,7 @@ const Field = struct {
             var pos: f32 = 0.0;
             for (self.tiles[layer].items) |tile| {
                 defer pos += 1.0;
-                if (tile.is_none()) continue;
+                if (tile == TileIndex.none) continue;
 
                 const width: f32 = @floatFromInt(self.width);
                 const x: f32 = @mod(pos, width);
@@ -195,14 +196,17 @@ pub fn main() !void {
     var field = Field.init(5, 5, tileset, std.heap.page_allocator) catch unreachable;
     defer field.deinit();
 
-    field.getTileMut(0, 0, 0).* = TileIndex.new(2, 0);
-    field.getTileMut(0, 1, 0).* = TileIndex.new(0, 0);
-    field.getTileMut(0, 0, 1).* = TileIndex.new(2, 1);
-    field.getTileMut(0, 1, 1).* = TileIndex.new(0, 1);
-    field.getTileMut(0, 0, 2).* = TileIndex.new(2, 1);
-    field.getTileMut(0, 1, 2).* = TileIndex.new(0, 1);
-    field.getTileMut(0, 0, 3).* = TileIndex.new(2, 2);
-    field.getTileMut(0, 1, 3).* = TileIndex.new(0, 2);
+    const tiles = [_]u32{
+        2, 0, 0, 0, 1, 0, 1, 0, 1, 0, //
+        2, 1, 0, 1, 1, 1, 1, 1, 1, 1, //
+        2, 1, 0, 1, 1, 1, 1, 1, 1, 1, //
+        2, 2, 0, 2, 1, 2, 1, 2, 4, 0, //
+        1, 0, 1, 0, 1, 0, 1, 0, 4, 1, //
+    };
+    var i: i32 = 0;
+    while (i < tiles.len) : (i += 2) {
+        field.getTileMut(0, @mod(i >> 1, field.width), @divTrunc(i >> 1, field.width)).* = tileset.indexAt(tiles[@intCast(i)], tiles[@intCast(i + 1)]);
+    }
 
     var cursor = FieldCursor.new(&field);
     var keyboardState = KeyboardState.init(std.heap.page_allocator);
