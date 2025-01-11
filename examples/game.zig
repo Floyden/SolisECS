@@ -138,15 +138,29 @@ const FieldCursor = struct {
     }
 };
 
+const KeyboardState = struct {
+    pressed: std.AutoHashMap(rl.KeyboardKey, ?void),
+
+    pub fn init(allocator: std.mem.Allocator) KeyboardState {
+        return .{ .pressed = std.AutoHashMap(rl.KeyboardKey, ?void).init(allocator) };
+    }
+
+    pub fn deinit(self: *KeyboardState) void {
+        self.pressed.deinit();
+    }
+};
+
 const KeyInput = struct {
     key: rl.KeyboardKey,
     pressed: bool,
 };
 
-pub fn handleInputEvents(writer: events.EventWriter(KeyInput)) void {
+pub fn handleInputEvents(keyboard: *KeyboardState, writer: events.EventWriter(KeyInput)) void {
     var key = rl.getKeyPressed();
-    while (key != rl.KeyboardKey.null) : (key = rl.getKeyPressed())
+    while (key != rl.KeyboardKey.null) : (key = rl.getKeyPressed()) {
+        keyboard.pressed.put(key, null) catch unreachable;
         writer.write(KeyInput{ .key = key, .pressed = true }) catch unreachable;
+    }
 }
 
 pub fn playerInput(reader: *events.EventReader(KeyInput), cursor: *FieldCursor) void {
@@ -212,14 +226,17 @@ pub fn main() !void {
     field.getTileMut(0, 1, 3).* = TileIndex.new(0, 2);
 
     var cursor = FieldCursor.new(&field);
+    var keyboardState = KeyboardState.init(std.heap.page_allocator);
+    defer keyboardState.deinit();
     var keyEvents = events.Events(KeyInput).init(std.heap.page_allocator);
     defer keyEvents.deinit();
+
     var reader = keyEvents.reader();
     const writer = keyEvents.writer();
 
     rl.setTargetFPS(30);
     while (!rl.windowShouldClose()) {
-        handleInputEvents(writer);
+        handleInputEvents(&keyboardState, writer);
 
         playerInput(&reader, &cursor);
 
