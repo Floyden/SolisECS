@@ -2,9 +2,19 @@ const std = @import("std");
 const rl = @import("raylib");
 const events = @import("events");
 
-const TileIndex = enum(u32) {
-    none = std.math.maxInt(u32),
-    _,
+const TileIndex = struct {
+    const none = TileIndex{ .x = std.math.maxInt(u32), .y = std.math.maxInt(u32) };
+
+    x: u32,
+    y: u32,
+
+    pub fn new(x: u32, y: u32) TileIndex {
+        return .{ .x = x, .y = y };
+    }
+
+    pub fn is_none(self: TileIndex) bool {
+        return std.meta.eql(self, TileIndex.none);
+    }
 };
 
 const TileSet = struct {
@@ -27,8 +37,8 @@ const TileSet = struct {
     }
 
     fn drawTile(self: TileSet, index: TileIndex, posX: f32, posY: f32) void {
-        const row: f32 = @floatFromInt(@divFloor(@intFromEnum(index), self.columns));
-        const column: f32 = @floatFromInt(@mod(@intFromEnum(index), self.columns));
+        const row: f32 = @floatFromInt(index.y);
+        const column: f32 = @floatFromInt(index.x);
         const width: f32 = @floatFromInt(self.width);
         const height: f32 = @floatFromInt(self.height);
         rl.drawTextureRec(
@@ -87,24 +97,13 @@ const Field = struct {
             var pos: f32 = 0.0;
             for (self.tiles[layer].items) |tile| {
                 defer pos += 1.0;
-                if (tile == TileIndex.none) continue;
+                if (tile.is_none()) continue;
 
                 const width: f32 = @floatFromInt(self.width);
                 const x: f32 = @mod(pos, width);
                 const y: f32 = @divTrunc(pos, width);
 
                 self.tile_set.drawTile(tile, pos_x + x * 16.0, pos_y + y * 16.0);
-
-                // const value = tile.type.asChar();
-                // const offset_x = (self.size - @as(f32, @floatFromInt(font.glyphs[value].image.width))) / 2.0;
-                // const offset_y = (self.size - @as(f32, @floatFromInt(font.glyphs[value].image.height))) / 2.0;
-                // rl.drawTextCodepoint(
-                //     font,
-                //     value,
-                //     rl.Vector2{ .x = (pos_x + x) * self.size + offset_x, .y = (pos_y + y) * self.size + offset_y },
-                //     self.size,
-                //     tile.color,
-                // );
             }
         }
     }
@@ -153,18 +152,29 @@ pub fn handleInputEvents(writer: events.EventWriter(KeyInput)) void {
 pub fn playerInput(reader: *events.EventReader(KeyInput), cursor: *FieldCursor) void {
     while (reader.next()) |event| {
         switch (event.key) {
-            rl.KeyboardKey.d => cursor.pos[0] += 1,
-            rl.KeyboardKey.a => cursor.pos[0] -= 1,
-            rl.KeyboardKey.s => cursor.pos[1] += 1,
-            rl.KeyboardKey.w => cursor.pos[1] -= 1,
+            rl.KeyboardKey.d => {
+                if (cursor.pos[0] < cursor.field.width)
+                    cursor.pos[0] += 1;
+            },
+            rl.KeyboardKey.a => {
+                if (cursor.pos[0] > 0)
+                    cursor.pos[0] -= 1;
+            },
+            rl.KeyboardKey.s => {
+                if (cursor.pos[1] < cursor.field.height)
+                    cursor.pos[1] += 1;
+            },
+            rl.KeyboardKey.w => {
+                if (cursor.pos[1] > 0)
+                    cursor.pos[1] -= 1;
+            },
             rl.KeyboardKey.space => {
-                if (cursor.selection) |_| {
-                    // const src_tile = cursor.field.getTileMut(1, pos[0], pos[1]);
-                    // if (!std.mem.eql(i32, &pos, &cursor.pos) and src_tile.type == TileType.Object) {
-                    //     const dest = cursor.field.getTileMut(1, cursor.pos[0], cursor.pos[1]);
-                    //     dest.* = src_tile.*;
-                    //     src_tile.type = TileType.Empty;
-                    // }
+                if (cursor.selection) |pos| {
+                    const src_tile = cursor.field.getTileMut(0, pos[0], pos[1]);
+                    if (!std.mem.eql(i32, &pos, &cursor.pos)) {
+                        const dest = cursor.field.getTileMut(0, cursor.pos[0], cursor.pos[1]);
+                        dest.* = src_tile.*;
+                    }
 
                     // Do something with cursor
                     cursor.selection = null;
@@ -189,17 +199,17 @@ pub fn main() !void {
     const tileset = TileSet.init_from_path(16, 16, "examples/resources/tileset.png");
     defer tileset.deinit();
 
-    var field = Field.init(10, 10, tileset, std.heap.page_allocator) catch unreachable;
+    var field = Field.init(5, 5, tileset, std.heap.page_allocator) catch unreachable;
     defer field.deinit();
 
-    field.getTileMut(0, 0, 0).* = @enumFromInt(2);
-    field.getTileMut(0, 1, 0).* = @enumFromInt(0);
-    field.getTileMut(0, 0, 1).* = @enumFromInt(5);
-    field.getTileMut(0, 1, 1).* = @enumFromInt(3);
-    field.getTileMut(0, 0, 2).* = @enumFromInt(5);
-    field.getTileMut(0, 1, 2).* = @enumFromInt(3);
-    field.getTileMut(0, 0, 3).* = @enumFromInt(8);
-    field.getTileMut(0, 1, 3).* = @enumFromInt(6);
+    field.getTileMut(0, 0, 0).* = TileIndex.new(2, 0);
+    field.getTileMut(0, 1, 0).* = TileIndex.new(0, 0);
+    field.getTileMut(0, 0, 1).* = TileIndex.new(2, 1);
+    field.getTileMut(0, 1, 1).* = TileIndex.new(0, 1);
+    field.getTileMut(0, 0, 2).* = TileIndex.new(2, 1);
+    field.getTileMut(0, 1, 2).* = TileIndex.new(0, 1);
+    field.getTileMut(0, 0, 3).* = TileIndex.new(2, 2);
+    field.getTileMut(0, 1, 3).* = TileIndex.new(0, 2);
 
     var cursor = FieldCursor.new(&field);
     var keyEvents = events.Events(KeyInput).init(std.heap.page_allocator);
