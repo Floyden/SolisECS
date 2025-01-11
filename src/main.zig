@@ -1,6 +1,9 @@
 const std = @import("std");
+const solis = @import("solis");
 
 pub fn main() !void {
+    _ = solis.input.keyboard.KeyboardState;
+
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
 

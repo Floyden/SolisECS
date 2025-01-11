@@ -1,5 +1,5 @@
 const std = @import("std");
-const ecs = @import("ecs");
+const ecs = @import("solis").ecs;
 
 const Position = struct { x: f32, y: f32 };
 const Velocity = struct { x: f32, y: f32 };

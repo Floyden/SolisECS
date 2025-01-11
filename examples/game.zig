@@ -1,6 +1,10 @@
 const std = @import("std");
-const rl = @import("raylib");
-const events = @import("events");
+const solis = @import("solis");
+const rl = solis.raylib;
+const events = solis.events;
+const KeyInput = solis.input.KeyInput;
+const KeyboardState = solis.input.KeyboardState;
+const handleInputEvents = solis.input.keyboard.handleInputEvents;
 
 const TileIndex = struct {
     const none = TileIndex{ .x = std.math.maxInt(u32), .y = std.math.maxInt(u32) };
@@ -137,31 +141,6 @@ const FieldCursor = struct {
         rl.drawRectangleLinesEx(rl.Rectangle{ .x = posX * size, .y = posY * size, .width = size, .height = size }, 1.0, rl.Color.black);
     }
 };
-
-const KeyboardState = struct {
-    pressed: std.AutoHashMap(rl.KeyboardKey, ?void),
-
-    pub fn init(allocator: std.mem.Allocator) KeyboardState {
-        return .{ .pressed = std.AutoHashMap(rl.KeyboardKey, ?void).init(allocator) };
-    }
-
-    pub fn deinit(self: *KeyboardState) void {
-        self.pressed.deinit();
-    }
-};
-
-const KeyInput = struct {
-    key: rl.KeyboardKey,
-    pressed: bool,
-};
-
-pub fn handleInputEvents(keyboard: *KeyboardState, writer: events.EventWriter(KeyInput)) void {
-    var key = rl.getKeyPressed();
-    while (key != rl.KeyboardKey.null) : (key = rl.getKeyPressed()) {
-        keyboard.pressed.put(key, null) catch unreachable;
-        writer.write(KeyInput{ .key = key, .pressed = true }) catch unreachable;
-    }
-}
 
 pub fn playerInput(reader: *events.EventReader(KeyInput), cursor: *FieldCursor) void {
     while (reader.next()) |event| {
