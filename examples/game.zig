@@ -6,12 +6,14 @@ const TileType = enum(u8) {
     Empty,
     Grass,
     Road,
+    Object,
 
     pub fn asChar(self: TileType) u8 {
         switch (self) {
             TileType.Empty => return ' ',
             TileType.Grass => return '#',
             TileType.Road => return '=',
+            TileType.Object => return 'X',
         }
     }
 };
@@ -58,9 +60,9 @@ const Field = struct {
         }
     }
 
-    pub fn getTileMut(self: *Field, layer: usize, x: usize, y: usize) *Tile {
+    pub fn getTileMut(self: *Field, layer: usize, x: i32, y: i32) *Tile {
         std.debug.assert(x < self.width and y < self.height);
-        return &self.tiles[layer].items[x + y * @as(usize, @intCast(self.width))];
+        return &self.tiles[layer].items[@as(usize, @intCast(x + y * self.width))];
     }
 
     pub fn render(self: Field, posX: i32, posY: i32) void {
@@ -139,7 +141,14 @@ pub fn playerInput(reader: *events.EventReader(KeyInput), cursor: *FieldCursor) 
             rl.KeyboardKey.s => cursor.pos[1] += 1,
             rl.KeyboardKey.w => cursor.pos[1] -= 1,
             rl.KeyboardKey.space => {
-                if (cursor.selection) |_| {
+                if (cursor.selection) |pos| {
+                    const src_tile = cursor.field.getTileMut(1, pos[0], pos[1]);
+                    if (!std.mem.eql(i32, &pos, &cursor.pos) and src_tile.type == TileType.Object) {
+                        const dest = cursor.field.getTileMut(1, cursor.pos[0], cursor.pos[1]);
+                        dest.* = src_tile.*;
+                        src_tile.type = TileType.Empty;
+                    }
+
                     // Do something with cursor
                     cursor.selection = null;
                 } else {
@@ -166,15 +175,17 @@ pub fn main() !void {
     field.fillAll(0, Tile.new(TileType.Grass, rl.Color.green));
     for (4..6) |y| {
         for (0..6) |x| {
-            field.getTileMut(0, x, y).* = Tile.new(TileType.Road, rl.Color.yellow);
+            field.getTileMut(0, @intCast(x), @intCast(y)).* = Tile.new(TileType.Road, rl.Color.yellow);
         }
     }
 
     for (0..4) |y| {
         for (4..6) |x| {
-            field.getTileMut(0, x, y).* = Tile.new(TileType.Road, rl.Color.yellow);
+            field.getTileMut(0, @intCast(x), @intCast(y)).* = Tile.new(TileType.Road, rl.Color.yellow);
         }
     }
+
+    field.getTileMut(1, 1, 0).* = Tile.new(TileType.Object, rl.Color.black);
 
     var cursor = FieldCursor.new(&field);
     var keyEvents = events.Events(KeyInput).init(std.heap.page_allocator);
