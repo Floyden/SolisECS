@@ -213,6 +213,7 @@ pub fn main() !void {
 
     var cursor = FieldCursor.new(&field);
     var keyEvents = events.Events(KeyInput).init(std.heap.page_allocator);
+    defer keyEvents.deinit();
     var reader = keyEvents.reader();
     const writer = keyEvents.writer();
 

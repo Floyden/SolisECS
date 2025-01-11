@@ -73,7 +73,7 @@ pub fn Events(comptime T: type) type {
             };
         }
         pub fn deinit(self: *Self) void {
-            for (self.buffers) |*buffer|
+            for (&self.buffers) |*buffer|
                 buffer.deinit();
         }
 
