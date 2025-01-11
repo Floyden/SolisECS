@@ -78,7 +78,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_exe_unit_tests.step);
 
     buildExample(b, target, optimize, "ecs/hello.zig", "hello_ecs");
-    buildExample(b, target, optimize, "window.zig", "window");
+    buildExample(b, target, optimize, "game.zig", "game");
 }
 
 pub fn buildExample(
@@ -106,6 +106,8 @@ pub fn buildExample(
     exe.linkSystemLibrary("c");
     builder.installArtifact(exe);
     exe.root_module.addImport("ecs", builder.createModule(.{ .root_source_file = builder.path("src/ecs/ecs.zig") }));
+    exe.root_module.addImport("solis", builder.createModule(.{ .root_source_file = builder.path("src/solis.zig") }));
+    exe.root_module.addImport("events", builder.createModule(.{ .root_source_file = builder.path("src/events.zig") }));
 
     exe.linkLibrary(raylib_artifact);
     exe.root_module.addImport("raylib", raylib);
