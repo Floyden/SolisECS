@@ -195,7 +195,7 @@ pub fn playerInput(reader: *events.EventReader(KeyInput), cursor: *FieldCursor) 
     while (reader.next()) |event| {
         switch (event.key) {
             rl.KeyboardKey.d => {
-                if (cursor.pos[0] < cursor.field.width)
+                if (cursor.pos[0] < cursor.field.width - 1)
                     cursor.pos[0] += 1;
             },
             rl.KeyboardKey.a => {
@@ -203,7 +203,7 @@ pub fn playerInput(reader: *events.EventReader(KeyInput), cursor: *FieldCursor) 
                     cursor.pos[0] -= 1;
             },
             rl.KeyboardKey.s => {
-                if (cursor.pos[1] < cursor.field.height)
+                if (cursor.pos[1] < cursor.field.height - 1)
                     cursor.pos[1] += 1;
             },
             rl.KeyboardKey.w => {
