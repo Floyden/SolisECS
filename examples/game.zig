@@ -15,6 +15,7 @@ const TileSet = struct {
     width: i32,
     height: i32,
     columns: u32,
+    offset: i32,
     image: rl.Image,
     texture: rl.Texture2D,
 
@@ -22,7 +23,7 @@ const TileSet = struct {
         const image = rl.loadImage(path);
         const texture = rl.loadTextureFromImage(image);
         const columns: u32 = @intCast(@divFloor(image.width, width));
-        return TileSet{ .width = width, .height = height, .columns = columns, .image = image, .texture = texture };
+        return TileSet{ .width = width, .height = height, .columns = columns, .offset = 0, .image = image, .texture = texture };
     }
 
     fn deinit(self: TileSet) void {
@@ -95,21 +96,20 @@ const Field = struct {
         return &self.tiles[layer].items[@as(usize, @intCast(x + y * self.width))];
     }
 
-    pub fn render(self: Field, posX: i32, posY: i32) void {
+    pub fn render_layer(self: Field, layer: usize, posX: i32, posY: i32) void {
         const pos_x: f32 = @floatFromInt(posX);
         const pos_y: f32 = @floatFromInt(posY);
-        for (0..LAYER_COUNT) |layer| {
-            var pos: f32 = 0.0;
-            for (self.tiles[layer].items) |tile| {
-                defer pos += 1.0;
-                if (tile == TileIndex.none) continue;
 
-                const width: f32 = @floatFromInt(self.width);
-                const x: f32 = @mod(pos, width);
-                const y: f32 = @divTrunc(pos, width);
+        var pos: f32 = 0.0;
+        for (self.tiles[layer].items) |tile| {
+            defer pos += 1.0;
+            if (tile == TileIndex.none) continue;
 
-                self.tile_set.drawTile(tile, pos_x + x * 16.0, pos_y + y * 16.0);
-            }
+            const width: f32 = @floatFromInt(self.width);
+            const x: f32 = @mod(pos, width);
+            const y: f32 = @divTrunc(pos, width);
+
+            self.tile_set.drawTile(tile, pos_x + x * 16.0, pos_y + y * 16.0);
         }
     }
 
@@ -117,6 +117,54 @@ const Field = struct {
         const posX: f32 = @floatFromInt(x);
         const posY: f32 = @floatFromInt(y);
         rl.drawRectangleLinesEx(rl.Rectangle{ .x = posX * self.size, .y = posY * self.size, .width = self.size, .height = self.size }, 1.0, rl.Color.black);
+    }
+};
+
+const AnimationType = enum {
+    Loop,
+    PlayOnce,
+};
+
+const Animation = struct {
+    current_frame: u32,
+    total_frames: u32,
+    current_time: f32,
+    frame_time: f32,
+    playing: bool,
+    animation_type: AnimationType,
+
+    pub fn new(frames: u32, frame_time: f32, animation_type: AnimationType) Animation {
+        return .{ .current_frame = 0, .total_frames = frames, .current_time = 0.0, .frame_time = frame_time, .playing = false, .animation_type = animation_type };
+    }
+
+    pub fn currentFrame(self: Animation) u32 {
+        return self.current_frame;
+    }
+
+    pub fn play(self: *Animation) void {
+        self.playing = true;
+    }
+
+    pub fn reset(self: *Animation) void {
+        self.current_frame = 0;
+        self.current_time = 0;
+    }
+
+    pub fn update(self: *Animation, time: f32) void {
+        if (!self.playing) return;
+        self.current_time += time;
+        if (self.current_time <= self.frame_time) return;
+
+        self.current_time -= self.frame_time;
+        if (self.current_frame < self.total_frames) {
+            self.current_frame += 1;
+            return;
+        }
+
+        switch (self.animation_type) {
+            AnimationType.Loop => self.current_frame = 0,
+            AnimationType.PlayOnce => self.playing = false,
+        }
     }
 };
 
@@ -193,6 +241,11 @@ pub fn main() !void {
     const tileset = TileSet.init_from_path(16, 16, "examples/resources/tileset.png");
     defer tileset.deinit();
 
+    var animation = Animation.new(6, 0.1, AnimationType.Loop);
+    animation.play();
+    const character = TileSet.init_from_path(100, 100, "examples/resources/Soldier-Idle.png");
+    defer character.deinit();
+
     var field = Field.init(5, 5, tileset, std.heap.page_allocator) catch unreachable;
     defer field.deinit();
 
@@ -220,18 +273,22 @@ pub fn main() !void {
     rl.setTargetFPS(30);
     while (!rl.windowShouldClose()) {
         handleInputEvents(&keyboardState, writer);
+        animation.update(rl.getFrameTime());
 
         playerInput(&reader, &cursor);
 
-        canvasLayers[0].begin();
+        for (0..Field.LAYER_COUNT) |layer| {
+            canvasLayers[layer].begin();
+            rl.clearBackground(rl.Color.white);
+            field.render_layer(layer, 0, 0);
 
-        rl.clearBackground(rl.Color.white);
+            canvasLayers[layer].end();
+        }
 
-        field.render(0, 0);
-        canvasLayers[0].end();
         canvasLayers[1].begin();
         rl.clearBackground(rl.Color.fromInt(0));
         cursor.render();
+        character.drawTile(@enumFromInt(animation.currentFrame()), -42, -42 + 16);
         canvasLayers[1].end();
         rl.beginDrawing();
         for (canvasLayers) |canvas| {
