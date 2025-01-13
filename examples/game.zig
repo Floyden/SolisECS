@@ -6,12 +6,12 @@ const KeyInput = solis.input.KeyInput;
 const KeyboardState = solis.input.KeyboardState;
 const handleInputEvents = solis.input.keyboard.handleInputEvents;
 
-const TileIndex = enum(u32) {
+const TextureAtlasIndex = enum(u32) {
     none = std.math.maxInt(u32),
     _,
 };
 
-const TileSet = struct {
+const TextureAtlas = struct {
     width: i32,
     height: i32,
     columns: u32,
@@ -19,29 +19,29 @@ const TileSet = struct {
     image: rl.Image,
     texture: rl.Texture2D,
 
-    fn init_from_path(width: i32, height: i32, path: [:0]const u8) TileSet {
+    fn init_from_path(width: i32, height: i32, path: [:0]const u8) TextureAtlas {
         const image = rl.loadImage(path);
         const texture = rl.loadTextureFromImage(image);
         const columns: u32 = @intCast(@divFloor(image.width, width));
-        return TileSet{ .width = width, .height = height, .columns = columns, .offset = 0, .image = image, .texture = texture };
+        return TextureAtlas{ .width = width, .height = height, .columns = columns, .offset = 0, .image = image, .texture = texture };
     }
 
-    fn deinit(self: TileSet) void {
+    fn deinit(self: TextureAtlas) void {
         rl.unloadTexture(self.texture);
         rl.unloadImage(self.image);
     }
 
-    fn indexAt(self: TileSet, x: u32, y: u32) TileIndex {
+    fn indexAt(self: TextureAtlas, x: u32, y: u32) TextureAtlasIndex {
         return @enumFromInt(x + y * self.columns);
     }
 
-    fn indexPos(self: TileSet, index: TileIndex) [2]u32 {
-        std.debug.assert(index != TileIndex.none);
+    fn indexPos(self: TextureAtlas, index: TextureAtlasIndex) [2]u32 {
+        std.debug.assert(index != TextureAtlasIndex.none);
         const idx = @intFromEnum(index);
         return .{ @mod(idx, self.columns), @divTrunc(idx, self.columns) };
     }
 
-    fn drawTile(self: TileSet, index: TileIndex, posX: f32, posY: f32) void {
+    fn drawTile(self: TextureAtlas, index: TextureAtlasIndex, posX: f32, posY: f32) void {
         const location = self.indexPos(index);
         const column: f32 = @floatFromInt(location[0]);
         const row: f32 = @floatFromInt(location[1]);
@@ -60,15 +60,15 @@ const Field = struct {
     const LAYER_COUNT: i32 = 2;
     width: i32,
     height: i32,
-    tile_set: TileSet,
-    tiles: [LAYER_COUNT]std.ArrayList(TileIndex),
+    tile_set: TextureAtlas,
+    tiles: [LAYER_COUNT]std.ArrayList(TextureAtlasIndex),
     size: f32,
 
-    pub fn init(width: i32, height: i32, tile_set: TileSet, allocator: std.mem.Allocator) !Field {
-        var tiles: [LAYER_COUNT]std.ArrayList(TileIndex) = undefined;
+    pub fn init(width: i32, height: i32, tile_set: TextureAtlas, allocator: std.mem.Allocator) !Field {
+        var tiles: [LAYER_COUNT]std.ArrayList(TextureAtlasIndex) = undefined;
         for (&tiles) |*layer| {
-            layer.* = std.ArrayList(TileIndex).init(allocator);
-            layer.appendNTimes(TileIndex.none, @intCast(width * height)) catch unreachable;
+            layer.* = std.ArrayList(TextureAtlasIndex).init(allocator);
+            layer.appendNTimes(TextureAtlasIndex.none, @intCast(width * height)) catch unreachable;
         }
 
         return Field{
@@ -84,14 +84,14 @@ const Field = struct {
         for (self.tiles) |layer| layer.deinit();
     }
 
-    pub fn fillAll(self: *Field, layer: usize, tile: TileIndex) void {
+    pub fn fillAll(self: *Field, layer: usize, tile: TextureAtlasIndex) void {
         std.debug.assert(layer < LAYER_COUNT);
         for (self.tiles[layer].items) |*t| {
             t.* = tile;
         }
     }
 
-    pub fn getTileMut(self: *Field, layer: usize, x: i32, y: i32) *TileIndex {
+    pub fn getTileMut(self: *Field, layer: usize, x: i32, y: i32) *TextureAtlasIndex {
         std.debug.assert(x < self.width and y < self.height);
         return &self.tiles[layer].items[@as(usize, @intCast(x + y * self.width))];
     }
@@ -103,7 +103,7 @@ const Field = struct {
         var pos: f32 = 0.0;
         for (self.tiles[layer].items) |tile| {
             defer pos += 1.0;
-            if (tile == TileIndex.none) continue;
+            if (tile == TextureAtlasIndex.none) continue;
 
             const width: f32 = @floatFromInt(self.width);
             const x: f32 = @mod(pos, width);
@@ -247,12 +247,12 @@ pub fn main() !void {
 
     rl.setTextureFilter(canvasLayers[0].texture, rl.TextureFilter.point);
 
-    const tileset = TileSet.init_from_path(16, 16, "examples/resources/tileset.png");
+    const tileset = TextureAtlas.init_from_path(16, 16, "examples/resources/tileset.png");
     defer tileset.deinit();
 
     var animation = Animation.new(6, 0.1, AnimationType.Loop);
     animation.play();
-    const character = TileSet.init_from_path(100, 100, "examples/resources/Soldier.png");
+    const character = TextureAtlas.init_from_path(100, 100, "examples/resources/Soldier.png");
     defer character.deinit();
 
     var field = Field.init(5, 5, tileset, std.heap.page_allocator) catch unreachable;
