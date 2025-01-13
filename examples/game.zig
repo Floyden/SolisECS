@@ -47,7 +47,7 @@ const Field = struct {
         return &self.tiles[layer].items[@as(usize, @intCast(x + y * self.width))];
     }
 
-    pub fn render_layer(self: Field, layer: usize, posX: i32, posY: i32) void {
+    pub fn renderLayer(self: Field, layer: usize, posX: i32, posY: i32) void {
         const pos_x: f32 = @floatFromInt(posX);
         const pos_y: f32 = @floatFromInt(posY);
 
@@ -281,7 +281,7 @@ pub fn main() !void {
         for (0..Field.LAYER_COUNT) |layer| {
             canvasLayers[layer].begin();
             rl.clearBackground(rl.Color.white);
-            field.render_layer(layer, 0, 0);
+            field.renderLayer(layer, 0, 0);
 
             canvasLayers[layer].end();
         }
