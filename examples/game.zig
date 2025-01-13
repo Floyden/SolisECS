@@ -74,6 +74,7 @@ const Field = struct {
 const AnimationType = enum {
     Loop,
     PlayOnce,
+    PlayOnceReset,
 };
 
 const Animation = struct {
@@ -115,6 +116,10 @@ const Animation = struct {
         switch (self.animation_type) {
             AnimationType.Loop => self.current_frame = 0,
             AnimationType.PlayOnce => self.playing = false,
+            AnimationType.PlayOnceReset => {
+                self.playing = false;
+                self.current_frame = 0;
+            },
         }
     }
 };
@@ -180,13 +185,39 @@ pub fn playerInput(reader: *events.EventReader(KeyInput), cursor: *FieldCursor) 
     }
 }
 
-pub fn updateCharacter(reader: *events.EventReader(KeyInput), animation: *Animation, time: f32) void {
+pub fn updateCharacter(reader: *events.EventReader(KeyInput), animation: [*]Animation, current_animation: *usize, time: f32) void {
+    var reset = false;
     while (reader.next()) |event| {
         switch (event.key) {
+            rl.KeyboardKey.one => {
+                current_animation.* = 1;
+                reset = true;
+            },
+            rl.KeyboardKey.two => {
+                current_animation.* = 2;
+                reset = true;
+            },
+            rl.KeyboardKey.three => {
+                current_animation.* = 3;
+                reset = true;
+            },
+            rl.KeyboardKey.four => {
+                current_animation.* = 4;
+                reset = true;
+            },
             else => {},
         }
     }
-    animation.update(time);
+
+    if (!reset and !animation[current_animation.*].playing) {
+        current_animation.* = 0;
+        reset = true;
+    }
+    if (reset) {
+        animation[current_animation.*].reset();
+        animation[current_animation.*].play();
+    }
+    animation[current_animation.*].update(time);
 }
 
 pub fn main() !void {
@@ -201,8 +232,17 @@ pub fn main() !void {
     const tileset = TextureAtlas.init_from_path(16, 16, "examples/resources/tileset.png");
     defer tileset.deinit();
 
-    var animation = Animation.new(6, 0.1, AnimationType.Loop);
-    animation.play();
+    var animations = [_]Animation{
+        Animation.new(6, 0.1, AnimationType.Loop),
+        Animation.new(8, 0.1, AnimationType.PlayOnce),
+        Animation.new(6, 0.1, AnimationType.PlayOnceReset),
+        Animation.new(6, 0.1, AnimationType.PlayOnceReset),
+        Animation.new(9, 0.1, AnimationType.PlayOnceReset),
+    };
+    var current_animation: usize = 0;
+    animations[current_animation].play();
+    _ = &current_animation;
+
     const character = TextureAtlas.init_from_path(100, 100, "examples/resources/Soldier.png");
     defer character.deinit();
 
@@ -234,7 +274,7 @@ pub fn main() !void {
     rl.setTargetFPS(30);
     while (!rl.windowShouldClose()) {
         handleInputEvents(&keyboardState, writer);
-        updateCharacter(&charReader, &animation, rl.getFrameTime());
+        updateCharacter(&charReader, &animations, &current_animation, rl.getFrameTime());
 
         playerInput(&reader, &cursor);
 
@@ -249,7 +289,8 @@ pub fn main() !void {
         canvasLayers[1].begin();
         rl.clearBackground(rl.Color.fromInt(0));
         cursor.render();
-        character.drawTile(@enumFromInt(animation.currentFrame()), -42, -42 + 16);
+        const current_frame = character.indexAt(animations[current_animation].currentFrame(), @intCast(current_animation));
+        character.drawTile(current_frame, -42, -42 + 16);
         canvasLayers[1].end();
         rl.beginDrawing();
         for (canvasLayers) |canvas| {
