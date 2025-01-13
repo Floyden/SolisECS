@@ -229,6 +229,15 @@ pub fn playerInput(reader: *events.EventReader(KeyInput), cursor: *FieldCursor) 
     }
 }
 
+pub fn updateCharacter(reader: *events.EventReader(KeyInput), animation: *Animation, time: f32) void {
+    while (reader.next()) |event| {
+        switch (event.key) {
+            else => {},
+        }
+    }
+    animation.update(time);
+}
+
 pub fn main() !void {
     rl.initWindow(800, 600, "Hi");
     defer rl.closeWindow();
@@ -243,7 +252,7 @@ pub fn main() !void {
 
     var animation = Animation.new(6, 0.1, AnimationType.Loop);
     animation.play();
-    const character = TileSet.init_from_path(100, 100, "examples/resources/Soldier-Idle.png");
+    const character = TileSet.init_from_path(100, 100, "examples/resources/Soldier.png");
     defer character.deinit();
 
     var field = Field.init(5, 5, tileset, std.heap.page_allocator) catch unreachable;
@@ -267,13 +276,14 @@ pub fn main() !void {
     var keyEvents = events.Events(KeyInput).init(std.heap.page_allocator);
     defer keyEvents.deinit();
 
+    var charReader = keyEvents.reader();
     var reader = keyEvents.reader();
     const writer = keyEvents.writer();
 
     rl.setTargetFPS(30);
     while (!rl.windowShouldClose()) {
         handleInputEvents(&keyboardState, writer);
-        animation.update(rl.getFrameTime());
+        updateCharacter(&charReader, &animation, rl.getFrameTime());
 
         playerInput(&reader, &cursor);
 
