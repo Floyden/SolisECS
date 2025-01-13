@@ -5,70 +5,21 @@ const events = solis.events;
 const KeyInput = solis.input.KeyInput;
 const KeyboardState = solis.input.KeyboardState;
 const handleInputEvents = solis.input.keyboard.handleInputEvents;
-
-const TextureAtlasIndex = enum(u32) {
-    none = std.math.maxInt(u32),
-    _,
-};
-
-const TextureAtlas = struct {
-    width: i32,
-    height: i32,
-    columns: u32,
-    offset: i32,
-    image: rl.Image,
-    texture: rl.Texture2D,
-
-    fn init_from_path(width: i32, height: i32, path: [:0]const u8) TextureAtlas {
-        const image = rl.loadImage(path);
-        const texture = rl.loadTextureFromImage(image);
-        const columns: u32 = @intCast(@divFloor(image.width, width));
-        return TextureAtlas{ .width = width, .height = height, .columns = columns, .offset = 0, .image = image, .texture = texture };
-    }
-
-    fn deinit(self: TextureAtlas) void {
-        rl.unloadTexture(self.texture);
-        rl.unloadImage(self.image);
-    }
-
-    fn indexAt(self: TextureAtlas, x: u32, y: u32) TextureAtlasIndex {
-        return @enumFromInt(x + y * self.columns);
-    }
-
-    fn indexPos(self: TextureAtlas, index: TextureAtlasIndex) [2]u32 {
-        std.debug.assert(index != TextureAtlasIndex.none);
-        const idx = @intFromEnum(index);
-        return .{ @mod(idx, self.columns), @divTrunc(idx, self.columns) };
-    }
-
-    fn drawTile(self: TextureAtlas, index: TextureAtlasIndex, posX: f32, posY: f32) void {
-        const location = self.indexPos(index);
-        const column: f32 = @floatFromInt(location[0]);
-        const row: f32 = @floatFromInt(location[1]);
-        const width: f32 = @floatFromInt(self.width);
-        const height: f32 = @floatFromInt(self.height);
-        rl.drawTextureRec(
-            self.texture,
-            rl.Rectangle{ .x = column * width, .y = row * height, .width = width, .height = height },
-            rl.Vector2{ .x = posX, .y = posY },
-            rl.Color.white,
-        );
-    }
-};
+const TextureAtlas = solis.TextureAtlas;
 
 const Field = struct {
     const LAYER_COUNT: i32 = 2;
     width: i32,
     height: i32,
-    tile_set: TextureAtlas,
-    tiles: [LAYER_COUNT]std.ArrayList(TextureAtlasIndex),
+    tile_set: solis.TextureAtlas,
+    tiles: [LAYER_COUNT]std.ArrayList(TextureAtlas.Index),
     size: f32,
 
     pub fn init(width: i32, height: i32, tile_set: TextureAtlas, allocator: std.mem.Allocator) !Field {
-        var tiles: [LAYER_COUNT]std.ArrayList(TextureAtlasIndex) = undefined;
+        var tiles: [LAYER_COUNT]std.ArrayList(TextureAtlas.Index) = undefined;
         for (&tiles) |*layer| {
-            layer.* = std.ArrayList(TextureAtlasIndex).init(allocator);
-            layer.appendNTimes(TextureAtlasIndex.none, @intCast(width * height)) catch unreachable;
+            layer.* = std.ArrayList(TextureAtlas.Index).init(allocator);
+            layer.appendNTimes(TextureAtlas.Index.none, @intCast(width * height)) catch unreachable;
         }
 
         return Field{
@@ -84,14 +35,14 @@ const Field = struct {
         for (self.tiles) |layer| layer.deinit();
     }
 
-    pub fn fillAll(self: *Field, layer: usize, tile: TextureAtlasIndex) void {
+    pub fn fillAll(self: *Field, layer: usize, tile: TextureAtlas.Index) void {
         std.debug.assert(layer < LAYER_COUNT);
         for (self.tiles[layer].items) |*t| {
             t.* = tile;
         }
     }
 
-    pub fn getTileMut(self: *Field, layer: usize, x: i32, y: i32) *TextureAtlasIndex {
+    pub fn getTileMut(self: *Field, layer: usize, x: i32, y: i32) *TextureAtlas.Index {
         std.debug.assert(x < self.width and y < self.height);
         return &self.tiles[layer].items[@as(usize, @intCast(x + y * self.width))];
     }
@@ -103,7 +54,7 @@ const Field = struct {
         var pos: f32 = 0.0;
         for (self.tiles[layer].items) |tile| {
             defer pos += 1.0;
-            if (tile == TextureAtlasIndex.none) continue;
+            if (tile == TextureAtlas.Index.none) continue;
 
             const width: f32 = @floatFromInt(self.width);
             const x: f32 = @mod(pos, width);
