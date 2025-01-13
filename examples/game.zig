@@ -156,7 +156,7 @@ const Animation = struct {
         if (self.current_time <= self.frame_time) return;
 
         self.current_time -= self.frame_time;
-        if (self.current_frame < self.total_frames) {
+        if (self.current_frame < self.total_frames - 1) {
             self.current_frame += 1;
             return;
         }
