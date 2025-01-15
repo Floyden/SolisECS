@@ -7,6 +7,28 @@ const KeyboardState = solis.input.KeyboardState;
 const handleInputEvents = solis.input.keyboard.handleInputEvents;
 const TextureAtlas = solis.TextureAtlas;
 
+const Character = struct {
+    const State = enum(u32) {
+        Idle = 0,
+        Moving,
+        Attack1,
+        Attack2,
+        Attack3,
+        _Count,
+    };
+
+    position: [2]f32, // just a single position for now
+    destination: ?[2]f32,
+    sprites: TextureAtlas,
+    state: State,
+    next_state: ?State,
+    animations: [@intFromEnum(State._Count)]Animation,
+
+    fn currentAnimation(self: *Character) *Animation {
+        return &self.animations[@intFromEnum(self.state)];
+    }
+};
+
 const Field = struct {
     const LAYER_COUNT: i32 = 2;
     width: i32,
@@ -14,6 +36,7 @@ const Field = struct {
     tile_set: solis.TextureAtlas,
     tiles: [LAYER_COUNT]std.ArrayList(TextureAtlas.Index),
     size: f32,
+    character: ?Character,
 
     pub fn init(width: i32, height: i32, tile_set: TextureAtlas, allocator: std.mem.Allocator) !Field {
         var tiles: [LAYER_COUNT]std.ArrayList(TextureAtlas.Index) = undefined;
@@ -28,6 +51,7 @@ const Field = struct {
             .tile_set = tile_set,
             .tiles = tiles,
             .size = @floatFromInt(tile_set.width),
+            .character = null,
         };
     }
 
@@ -167,57 +191,47 @@ pub fn playerInput(reader: *events.EventReader(KeyInput), cursor: *FieldCursor) 
                     cursor.pos[1] -= 1;
             },
             rl.KeyboardKey.space => {
-                if (cursor.selection) |pos| {
-                    const src_tile = cursor.field.getTileMut(0, pos[0], pos[1]);
-                    if (!std.mem.eql(i32, &pos, &cursor.pos)) {
-                        const dest = cursor.field.getTileMut(0, cursor.pos[0], cursor.pos[1]);
-                        dest.* = src_tile.*;
-                    }
-
-                    // Do something with cursor
-                    cursor.selection = null;
-                } else {
-                    cursor.selection = cursor.pos;
-                }
+                cursor.field.character.?.destination = [2]f32{ @floatFromInt(cursor.pos[0]), @floatFromInt(cursor.pos[1]) };
             },
             else => {},
         }
     }
 }
 
-pub fn updateCharacter(reader: *events.EventReader(KeyInput), animation: [*]Animation, current_animation: *usize, time: f32) void {
-    var reset = false;
+pub fn updateCharacter(reader: *events.EventReader(KeyInput), character: *Character, time: f32) void {
     while (reader.next()) |event| {
         switch (event.key) {
             rl.KeyboardKey.one => {
-                current_animation.* = 1;
-                reset = true;
+                character.next_state = Character.State.Attack1;
             },
             rl.KeyboardKey.two => {
-                current_animation.* = 2;
-                reset = true;
+                character.next_state = Character.State.Attack2;
             },
             rl.KeyboardKey.three => {
-                current_animation.* = 3;
-                reset = true;
-            },
-            rl.KeyboardKey.four => {
-                current_animation.* = 4;
-                reset = true;
+                character.next_state = Character.State.Attack3;
             },
             else => {},
         }
     }
 
-    if (!reset and !animation[current_animation.*].playing) {
-        current_animation.* = 0;
-        reset = true;
+    // cancel queued movement if other animation was queued
+    if (character.destination) |_| {
+        if (character.next_state != null) {
+            character.destination = null;
+        } else {
+            character.next_state = Character.State.Moving;
+        }
     }
-    if (reset) {
-        animation[current_animation.*].reset();
-        animation[current_animation.*].play();
+
+    if (!character.currentAnimation().playing or (character.state == Character.State.Idle and character.next_state != null)) {
+        character.state = if (character.next_state) |next| next else Character.State.Idle;
+        character.next_state = null;
+
+        character.currentAnimation().reset();
+        character.currentAnimation().play();
     }
-    animation[current_animation.*].update(time);
+
+    character.currentAnimation().update(time);
 }
 
 pub fn main() !void {
@@ -232,22 +246,28 @@ pub fn main() !void {
     const tileset = TextureAtlas.init_from_path(16, 16, "examples/resources/tileset.png");
     defer tileset.deinit();
 
-    var animations = [_]Animation{
-        Animation.new(6, 0.1, AnimationType.Loop),
-        Animation.new(8, 0.1, AnimationType.PlayOnce),
-        Animation.new(6, 0.1, AnimationType.PlayOnceReset),
-        Animation.new(6, 0.1, AnimationType.PlayOnceReset),
-        Animation.new(9, 0.1, AnimationType.PlayOnceReset),
-    };
-    var current_animation: usize = 0;
-    animations[current_animation].play();
-    _ = &current_animation;
-
     const character = TextureAtlas.init_from_path(100, 100, "examples/resources/Soldier.png");
     defer character.deinit();
 
     var field = Field.init(5, 5, tileset, std.heap.page_allocator) catch unreachable;
     defer field.deinit();
+
+    const animations = [_]Animation{
+        Animation.new(6, 0.1, AnimationType.Loop),
+        Animation.new(8, 0.6 / 8.0, AnimationType.PlayOnce),
+        Animation.new(6, 0.1, AnimationType.PlayOnceReset),
+        Animation.new(6, 0.1, AnimationType.PlayOnceReset),
+        Animation.new(9, 0.1, AnimationType.PlayOnceReset),
+    };
+
+    field.character = Character{
+        .position = .{ 0, 1 },
+        .destination = null,
+        .state = Character.State.Idle,
+        .next_state = null,
+        .sprites = character,
+        .animations = animations,
+    };
 
     const tiles = [_]u32{
         2, 0, 0, 0, 1, 0, 1, 0, 1, 0, //
@@ -274,7 +294,7 @@ pub fn main() !void {
     rl.setTargetFPS(30);
     while (!rl.windowShouldClose()) {
         handleInputEvents(&keyboardState, writer);
-        updateCharacter(&charReader, &animations, &current_animation, rl.getFrameTime());
+        updateCharacter(&charReader, &field.character.?, rl.getFrameTime());
 
         playerInput(&reader, &cursor);
 
@@ -289,9 +309,13 @@ pub fn main() !void {
         canvasLayers[1].begin();
         rl.clearBackground(rl.Color.fromInt(0));
         cursor.render();
-        const current_frame = character.indexAt(animations[current_animation].currentFrame(), @intCast(current_animation));
-        character.drawTile(current_frame, -42, -42 + 16);
+        if (field.character) |*char| {
+            const current_frame = char.sprites.indexAt(char.currentAnimation().currentFrame(), @intFromEnum(char.state));
+            char.sprites.drawTile(current_frame, -42.0 + char.position[0] * field.size, -42.0 + char.position[1] * field.size);
+        }
         canvasLayers[1].end();
+
+        // Render final image
         rl.beginDrawing();
         for (canvasLayers) |canvas| {
             rl.drawTexturePro(
