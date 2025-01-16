@@ -6,6 +6,7 @@ const KeyInput = solis.input.KeyInput;
 const KeyboardState = solis.input.KeyboardState;
 const handleInputEvents = solis.input.keyboard.handleInputEvents;
 const TextureAtlas = solis.TextureAtlas;
+const Animation2D = solis.Animation2D;
 
 const Character = struct {
     const State = enum(u32) {
@@ -22,9 +23,9 @@ const Character = struct {
     sprites: TextureAtlas,
     state: State,
     next_state: ?State,
-    animations: [@intFromEnum(State._Count)]Animation,
+    animations: [@intFromEnum(State._Count)]Animation2D,
 
-    fn currentAnimation(self: *Character) *Animation {
+    fn currentAnimation(self: *Character) *Animation2D {
         return &self.animations[@intFromEnum(self.state)];
     }
 };
@@ -92,59 +93,6 @@ const Field = struct {
         const posX: f32 = @floatFromInt(x);
         const posY: f32 = @floatFromInt(y);
         rl.drawRectangleLinesEx(rl.Rectangle{ .x = posX * self.size, .y = posY * self.size, .width = self.size, .height = self.size }, 1.0, rl.Color.black);
-    }
-};
-
-const AnimationType = enum {
-    Loop,
-    PlayOnce,
-    PlayOnceReset,
-};
-
-const Animation = struct {
-    current_frame: u32,
-    total_frames: u32,
-    current_time: f32,
-    frame_time: f32,
-    playing: bool,
-    animation_type: AnimationType,
-
-    pub fn new(frames: u32, frame_time: f32, animation_type: AnimationType) Animation {
-        return .{ .current_frame = 0, .total_frames = frames, .current_time = 0.0, .frame_time = frame_time, .playing = false, .animation_type = animation_type };
-    }
-
-    pub fn currentFrame(self: Animation) u32 {
-        return self.current_frame;
-    }
-
-    pub fn play(self: *Animation) void {
-        self.playing = true;
-    }
-
-    pub fn reset(self: *Animation) void {
-        self.current_frame = 0;
-        self.current_time = 0;
-    }
-
-    pub fn update(self: *Animation, time: f32) void {
-        if (!self.playing) return;
-        self.current_time += time;
-        if (self.current_time <= self.frame_time) return;
-
-        self.current_time -= self.frame_time;
-        if (self.current_frame < self.total_frames - 1) {
-            self.current_frame += 1;
-            return;
-        }
-
-        switch (self.animation_type) {
-            AnimationType.Loop => self.current_frame = 0,
-            AnimationType.PlayOnce => self.playing = false,
-            AnimationType.PlayOnceReset => {
-                self.playing = false;
-                self.current_frame = 0;
-            },
-        }
     }
 };
 
@@ -252,12 +200,12 @@ pub fn main() !void {
     var field = Field.init(5, 5, tileset, std.heap.page_allocator) catch unreachable;
     defer field.deinit();
 
-    const animations = [_]Animation{
-        Animation.new(6, 0.1, AnimationType.Loop),
-        Animation.new(8, 0.6 / 8.0, AnimationType.PlayOnce),
-        Animation.new(6, 0.1, AnimationType.PlayOnceReset),
-        Animation.new(6, 0.1, AnimationType.PlayOnceReset),
-        Animation.new(9, 0.1, AnimationType.PlayOnceReset),
+    const animations = [_]Animation2D{
+        Animation2D.new(6, 0.1, Animation2D.Type.Loop),
+        Animation2D.new(8, 0.6 / 8.0, Animation2D.Type.PlayOnce),
+        Animation2D.new(6, 0.1, Animation2D.Type.PlayOnceReset),
+        Animation2D.new(6, 0.1, Animation2D.Type.PlayOnceReset),
+        Animation2D.new(9, 0.1, Animation2D.Type.PlayOnceReset),
     };
 
     field.character = Character{
