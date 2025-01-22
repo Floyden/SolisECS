@@ -47,6 +47,7 @@ const Character = struct {
     }
 
     fn setDestination(self: *Character, dest: [2]f32) void {
+        if (@reduce(.And, dest == self.position)) return;
         self.destination = dest;
         self.queueNext(State.Moving);
     }
@@ -62,7 +63,6 @@ const Character = struct {
         character.timer -= TICK;
 
         var transit = true;
-        _ = &transit;
 
         if (character.state == State.Moving) {
             if (character.destination) |dest| {
@@ -228,7 +228,7 @@ pub fn main() !void {
 
     const animations = [_]Animation2D{
         Animation2D.new(6, 0.1, Animation2D.Type.Loop),
-        Animation2D.new(8, 0.6 / 8.0, Animation2D.Type.PlayOnce),
+        Animation2D.new(8, 0.6 / 8.0, Animation2D.Type.Loop),
         Animation2D.new(6, 0.1, Animation2D.Type.PlayOnceReset),
         Animation2D.new(6, 0.1, Animation2D.Type.PlayOnceReset),
         Animation2D.new(9, 0.6 / 9.0, Animation2D.Type.PlayOnceReset),
