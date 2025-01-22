@@ -69,10 +69,12 @@ const Character = struct {
 
             const idx = @intFromBool(@abs(diff[0]) < @abs(diff[1]));
             character.position[idx] += std.math.sign(diff[idx]);
-            transit = character.next_state != null;
 
-            if (@reduce(.And, character.position == character.destination.?))
+            if (@reduce(.And, character.position == character.destination.?)) {
                 character.destination = null;
+            } else {
+                transit = character.next_state != null;
+            }
         }
 
         if (transit)
