@@ -18,15 +18,68 @@ const Character = struct {
         _Count,
     };
 
-    position: [2]f32, // just a single position for now
-    destination: ?[2]f32,
+    position: @Vector(2, f32), // just a single position for now
+    destination: ?@Vector(2, f32),
     sprites: TextureAtlas,
+    timer: f32,
     state: State,
     next_state: ?State,
     animations: [@intFromEnum(State._Count)]Animation2D,
 
     fn currentAnimation(self: *Character) *Animation2D {
         return &self.animations[@intFromEnum(self.state)];
+    }
+
+    // Transition to the next state
+    fn transition(self: *Character) void {
+        self.state = if (self.next_state) |next| next else State.Idle;
+        self.next_state = null;
+
+        var current_animation = self.currentAnimation();
+        current_animation.reset();
+        current_animation.play();
+    }
+
+    fn queueNext(self: *Character, next: State) void {
+        if (self.state != State.Moving and next != State.Moving)
+            self.destination = null;
+        self.next_state = next;
+    }
+
+    fn setDestination(self: *Character, dest: [2]f32) void {
+        self.destination = dest;
+        self.queueNext(State.Moving);
+    }
+
+    pub fn update(character: *Character, time: f32) void {
+        defer character.currentAnimation().update(time);
+
+        const TICK = 60.0 / 100.0;
+        character.timer += time;
+
+        if (character.timer < TICK)
+            return;
+        character.timer -= TICK;
+
+        var transit = true;
+        _ = &transit;
+
+        if (character.state == State.Moving) {
+            if (character.destination) |dest| {
+                const diff = dest - character.position;
+
+                const idx = @intFromBool(@abs(diff[0]) < @abs(diff[1]));
+                character.position[idx] += std.math.sign(diff[idx]);
+                if (@reduce(.And, character.position == character.destination.?)) {
+                    character.destination = null;
+                } else if (character.next_state == null) {
+                    transit = false;
+                }
+            }
+        }
+        if (transit) {
+            character.transition();
+        }
     }
 };
 
@@ -139,47 +192,20 @@ pub fn playerInput(reader: *events.EventReader(KeyInput), cursor: *FieldCursor) 
                     cursor.pos[1] -= 1;
             },
             rl.KeyboardKey.space => {
-                cursor.field.character.?.destination = [2]f32{ @floatFromInt(cursor.pos[0]), @floatFromInt(cursor.pos[1]) };
+                cursor.field.character.?.setDestination([2]f32{ @floatFromInt(cursor.pos[0]), @floatFromInt(cursor.pos[1]) });
             },
-            else => {},
-        }
-    }
-}
-
-pub fn updateCharacter(reader: *events.EventReader(KeyInput), character: *Character, time: f32) void {
-    while (reader.next()) |event| {
-        switch (event.key) {
             rl.KeyboardKey.one => {
-                character.next_state = Character.State.Attack1;
+                cursor.field.character.?.queueNext(Character.State.Attack1);
             },
             rl.KeyboardKey.two => {
-                character.next_state = Character.State.Attack2;
+                cursor.field.character.?.queueNext(Character.State.Attack2);
             },
             rl.KeyboardKey.three => {
-                character.next_state = Character.State.Attack3;
+                cursor.field.character.?.queueNext(Character.State.Attack3);
             },
             else => {},
         }
     }
-
-    // cancel queued movement if other animation was queued
-    if (character.destination) |_| {
-        if (character.next_state != null) {
-            character.destination = null;
-        } else {
-            character.next_state = Character.State.Moving;
-        }
-    }
-
-    if (!character.currentAnimation().playing or (character.state == Character.State.Idle and character.next_state != null)) {
-        character.state = if (character.next_state) |next| next else Character.State.Idle;
-        character.next_state = null;
-
-        character.currentAnimation().reset();
-        character.currentAnimation().play();
-    }
-
-    character.currentAnimation().update(time);
 }
 
 pub fn main() !void {
@@ -205,7 +231,7 @@ pub fn main() !void {
         Animation2D.new(8, 0.6 / 8.0, Animation2D.Type.PlayOnce),
         Animation2D.new(6, 0.1, Animation2D.Type.PlayOnceReset),
         Animation2D.new(6, 0.1, Animation2D.Type.PlayOnceReset),
-        Animation2D.new(9, 0.1, Animation2D.Type.PlayOnceReset),
+        Animation2D.new(9, 0.6 / 9.0, Animation2D.Type.PlayOnceReset),
     };
 
     field.character = Character{
@@ -213,6 +239,7 @@ pub fn main() !void {
         .destination = null,
         .state = Character.State.Idle,
         .next_state = null,
+        .timer = 0.0,
         .sprites = character,
         .animations = animations,
     };
@@ -235,14 +262,13 @@ pub fn main() !void {
     var keyEvents = events.Events(KeyInput).init(std.heap.page_allocator);
     defer keyEvents.deinit();
 
-    var charReader = keyEvents.reader();
     var reader = keyEvents.reader();
     const writer = keyEvents.writer();
 
     rl.setTargetFPS(30);
     while (!rl.windowShouldClose()) {
         handleInputEvents(&keyboardState, writer);
-        updateCharacter(&charReader, &field.character.?, rl.getFrameTime());
+        field.character.?.update(rl.getFrameTime());
 
         playerInput(&reader, &cursor);
 
