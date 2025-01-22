@@ -64,22 +64,19 @@ const Character = struct {
 
         var transit = true;
 
-        if (character.state == State.Moving) {
-            if (character.destination) |dest| {
-                const diff = dest - character.position;
+        if (character.state == State.Moving and character.destination != null) {
+            const diff = character.destination.? - character.position;
 
-                const idx = @intFromBool(@abs(diff[0]) < @abs(diff[1]));
-                character.position[idx] += std.math.sign(diff[idx]);
-                if (@reduce(.And, character.position == character.destination.?)) {
-                    character.destination = null;
-                } else if (character.next_state == null) {
-                    transit = false;
-                }
-            }
+            const idx = @intFromBool(@abs(diff[0]) < @abs(diff[1]));
+            character.position[idx] += std.math.sign(diff[idx]);
+            transit = character.next_state != null;
+
+            if (@reduce(.And, character.position == character.destination.?))
+                character.destination = null;
         }
-        if (transit) {
+
+        if (transit)
             character.transition();
-        }
     }
 };
 
