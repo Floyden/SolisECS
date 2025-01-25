@@ -149,24 +149,22 @@ const Field = struct {
 };
 
 const FieldCursor = struct {
-    pos: [2]i32,
-    selection: ?[2]i32,
+    pos: @Vector(2, f32),
+    selection: ?*Character,
     field: *Field,
 
     pub fn new(field: *Field) FieldCursor {
-        return .{ .pos = [_]i32{ 0, 0 }, .selection = null, .field = field };
+        return .{ .pos = .{ 0.0, 0.0 }, .selection = null, .field = field };
     }
 
     pub fn render(self: FieldCursor) void {
         const size = self.field.size;
 
         if (self.selection) |select| {
-            const selectX: f32 = @floatFromInt(select[0]);
-            const selectY: f32 = @floatFromInt(select[1]);
-            rl.drawRectangleLinesEx(rl.Rectangle{ .x = selectX * size, .y = selectY * size, .width = size, .height = size }, 1.0, rl.Color.green);
+            rl.drawRectangleLinesEx(rl.Rectangle{ .x = select.position[0] * size, .y = select.position[1] * size, .width = size, .height = size }, 1.0, rl.Color.green);
         }
-        const posX: f32 = @floatFromInt(self.pos[0]);
-        const posY: f32 = @floatFromInt(self.pos[1]);
+        const posX: f32 = self.pos[0];
+        const posY: f32 = self.pos[1];
         rl.drawRectangleLinesEx(rl.Rectangle{ .x = posX * size, .y = posY * size, .width = size, .height = size }, 1.0, rl.Color.black);
     }
 };
@@ -175,7 +173,7 @@ pub fn playerInput(reader: *events.EventReader(KeyInput), cursor: *FieldCursor) 
     while (reader.next()) |event| {
         switch (event.key) {
             rl.KeyboardKey.d => {
-                if (cursor.pos[0] < cursor.field.width - 1)
+                if (cursor.pos[0] < @as(f32, @floatFromInt(cursor.field.width - 1)))
                     cursor.pos[0] += 1;
             },
             rl.KeyboardKey.a => {
@@ -183,7 +181,7 @@ pub fn playerInput(reader: *events.EventReader(KeyInput), cursor: *FieldCursor) 
                     cursor.pos[0] -= 1;
             },
             rl.KeyboardKey.s => {
-                if (cursor.pos[1] < cursor.field.height - 1)
+                if (cursor.pos[1] < @as(f32, @floatFromInt(cursor.field.height - 1)))
                     cursor.pos[1] += 1;
             },
             rl.KeyboardKey.w => {
@@ -191,16 +189,23 @@ pub fn playerInput(reader: *events.EventReader(KeyInput), cursor: *FieldCursor) 
                     cursor.pos[1] -= 1;
             },
             rl.KeyboardKey.space => {
-                cursor.field.character.?.setDestination([2]f32{ @floatFromInt(cursor.pos[0]), @floatFromInt(cursor.pos[1]) });
+                if (cursor.selection) |character| {
+                    character.setDestination(cursor.pos);
+                } else if (@reduce(.And, cursor.field.character.?.position == cursor.pos)) {
+                    cursor.selection = &cursor.field.character.?;
+                }
             },
             rl.KeyboardKey.one => {
-                cursor.field.character.?.queueNext(Character.State.Attack1);
+                if (cursor.selection) |character|
+                    character.queueNext(Character.State.Attack1);
             },
             rl.KeyboardKey.two => {
-                cursor.field.character.?.queueNext(Character.State.Attack2);
+                if (cursor.selection) |character|
+                    character.queueNext(Character.State.Attack2);
             },
             rl.KeyboardKey.three => {
-                cursor.field.character.?.queueNext(Character.State.Attack3);
+                if (cursor.selection) |character|
+                    character.queueNext(Character.State.Attack3);
             },
             else => {},
         }
