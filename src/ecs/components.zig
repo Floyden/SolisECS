@@ -11,6 +11,13 @@ pub const List = struct {
     }
 
     pub fn deinit(self: *List, allocator: std.mem.Allocator) void {
+        if (self.desc.deinit) |deinit_ptr_raw| {
+            const deinit_ptr: *const fn (*anyopaque, std.mem.Allocator) void = @ptrCast(deinit_ptr_raw);
+            var i: usize = 0;
+            while (i < self.data.items.len) : (i += self.desc.size) {
+                deinit_ptr(&self.data.items[i], allocator);
+            }
+        }
         self.data.deinit(allocator);
     }
 
@@ -62,14 +69,22 @@ pub const List = struct {
 
 pub const Description = struct {
     size: usize,
-    alignment: usize,
+    alignment: u16,
     id: type_id.TypeId,
+    deinit: ?*const anyopaque,
 
-    pub fn get(T: type) Description {
+    pub fn get(comptime T: type) Description {
+        comptime var deinit_ptr: ?*const anyopaque = null;
+
+        if (@hasDecl(T, "deinit")) {
+            deinit_ptr = @ptrCast(&@field(T, "deinit"));
+        }
+
         return .{
             .size = @sizeOf(T),
             .alignment = @alignOf(T),
             .id = type_id.typeId(T),
+            .deinit = deinit_ptr,
         };
     }
 };

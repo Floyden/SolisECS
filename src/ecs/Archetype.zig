@@ -55,6 +55,8 @@ pub fn deinit(self: *Archetype, allocator: std.mem.Allocator) void {
         list.deinit(allocator);
     }
     self.components.deinit(allocator);
+    self.addTypeEdges.deinit(allocator);
+    self.removeTypeEdges.deinit(allocator);
 }
 
 pub fn addEntity(self: *Archetype, allocator: std.mem.Allocator, entity: Entity) !void {

@@ -104,7 +104,7 @@ pub fn setComponents(self: *Storage, entity: Entity, comptime T: type, arg: T) !
         for (source.components.items, 0..) |list, i| {
             types.ptr[i] = list.desc;
         }
-        types[source.components.items.len] = ComponentDesc{ .size = @sizeOf(T), .alignment = @alignOf(T), .id = type_id.typeId(T) };
+        types[source.components.items.len] = ComponentDesc.get(T);
 
         const new_archetype = try self.allocator.create(Archetype);
         new_archetype.* = try Archetype.init(self.allocator, types);
