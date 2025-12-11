@@ -1,6 +1,7 @@
 const std = @import("std");
-const ecs = @import("ecs.zig");
+const Entity = @import("Entity.zig");
 const _component = @import("components.zig");
+const type_id = @import("type_id.zig");
 pub const Archetype = @import("Archetype.zig");
 const ComponentDesc = _component.Description;
 const ComponentList = _component.List;
@@ -25,13 +26,13 @@ pub fn deinit(self: *Storage) void {
     self.archetypes.deinit(self.allocator);
 }
 
-pub fn addEntity(self: *Storage, entity: ecs.Entity) !ecs.Entity {
+pub fn addEntity(self: *Storage, allocator: std.mem.Allocator, entity: Entity) !Entity {
     // Store entity in Archetype without components
-    try self.archetypes.items[0].addEntity(entity);
+    try self.archetypes.items[0].addEntity(allocator, entity);
     return entity;
 }
 
-pub fn markEntity(self: *Storage, entity: ecs.Entity) void {
+pub fn markEntity(self: *Storage, entity: Entity) void {
     _ = entity;
     _ = self;
 }
@@ -40,16 +41,16 @@ pub fn removeMarked(self: *Storage) void {
     _ = self;
 }
 
-fn findArchetype(self: *Storage, entity: ecs.Entity) ?struct { index: usize, archetype: *Archetype } {
+fn findArchetype(self: *Storage, entity: Entity) ?struct { index: usize, archetype: *Archetype } {
     for (0..self.archetypes.items.len) |i| {
-        if (self.archetypes.items[i].hasEntity(entity)) |value| {
+        if (self.archetypes.items[i].findEntity(entity)) |value| {
             return .{ .index = value, .archetype = &self.archetypes.items[i] };
         }
     }
     return null;
 }
 
-pub fn get(self: *Storage, comptime T: type, entity: ecs.Entity) ?*const T {
+pub fn get(self: *Storage, comptime T: type, entity: Entity) ?*const T {
     const location = self.findArchetype(entity).?;
     const source = location.archetype;
     const index = location.index;
@@ -62,7 +63,7 @@ pub fn get(self: *Storage, comptime T: type, entity: ecs.Entity) ?*const T {
     return null;
 }
 
-pub fn getMut(self: *Storage, comptime T: type, entity: ecs.Entity) ?*T {
+pub fn getMut(self: *Storage, comptime T: type, entity: Entity) ?*T {
     const location = self.findArchetype(entity).?;
     const source = location.archetype;
     const index = location.index;
@@ -75,7 +76,7 @@ pub fn getMut(self: *Storage, comptime T: type, entity: ecs.Entity) ?*T {
     return null;
 }
 
-pub fn setComponents(self: *Storage, entity: ecs.Entity, comptime T: type, arg: T) !void {
+pub fn setComponents(self: *Storage, entity: Entity, comptime T: type, arg: T) !void {
     // Find Archetype of the Entity
     const location = self.findArchetype(entity);
     std.debug.assert(location != null);
@@ -99,25 +100,25 @@ pub fn setComponents(self: *Storage, entity: ecs.Entity, comptime T: type, arg: 
         for (source.components.items, 0..) |list, i| {
             types.ptr[i] = list.desc;
         }
-        types[source.components.items.len] = ComponentDesc{ .size = @sizeOf(T), .alignment = @alignOf(T), .name = @typeName(T) };
+        types[source.components.items.len] = ComponentDesc{ .size = @sizeOf(T), .alignment = @alignOf(T), .id = type_id.typeId(T) };
 
-        try self.archetypes.append(try Archetype.init(self.allocator, types));
+        try self.archetypes.append(self.allocator, try Archetype.init(self.allocator, types));
         var dest = &self.archetypes.items[self.archetypes.items.len - 1];
-        try dest.removeTypeEdges.append(Archetype.Edge{ .from = dest, .to = source, .typeName = @typeName(T) });
-        try source.addTypeEdges.append(Archetype.Edge{ .from = source, .to = dest, .typeName = @typeName(T) });
+        try dest.removeTypeEdges.append(self.allocator, Archetype.Edge{ .from = dest, .to = source, .typeName = @typeName(T) });
+        try source.addTypeEdges.append(self.allocator, Archetype.Edge{ .from = source, .to = dest, .typeName = @typeName(T) });
         destination = dest;
     }
 
     // Move entity
-    try destination.?.entities.append(entity);
+    try destination.?.entities.append(self.allocator, entity);
 
     for (destination.?.components.items) |*component| {
-        const index = source.getTypeLocation(component.desc.name);
+        const index = source.getTypeLocation(component.desc.id);
         if (index == null) {
-            try component.append(T, arg);
+            try component.append(self.allocator, T, arg);
             continue;
         }
-        try component.appendRaw(source.components.items[index.?].getSingleRaw(entityIdx));
+        try component.appendRaw(self.allocator, source.components.items[index.?].getSingleRaw(entityIdx));
     }
     source.removeEntity(entity);
 }

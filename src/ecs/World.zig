@@ -4,7 +4,7 @@ const iter = @import("iter.zig");
 
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
-const Entity = ecs.Entity;
+const Entity = @import("Entity.zig");
 const ComponentDesc = @import("components.zig").Description;
 const SystemDesc = ecs.SystemDesc;
 const Storage = @import("Storage.zig");
@@ -16,17 +16,23 @@ const World = @This();
 allocator: Allocator,
 components: ArrayList(ComponentDesc),
 systems: ArrayList(SystemDesc),
-maxEnt: usize,
 storage: Storage,
 
-pub fn init(allocator: Allocator) World {
-    return World{
+nextEntity: Entity,
+
+pub fn init(allocator: Allocator) !World {
+    var world = World{
         .allocator = allocator,
         .components = .empty,
         .systems = .empty,
-        .maxEnt = 1,
+        .nextEntity = .{ .id = 1 },
         .storage = Storage.init(allocator) catch unreachable,
     };
+
+    try world.register(allocator, single.SingleUntyped);
+    world.singletons = try world.create(allocator);
+
+    return world;
 }
 
 pub fn deinit(self: *World) void {
@@ -39,15 +45,8 @@ pub fn deinit(self: *World) void {
 }
 
 // [TODO] implement
-pub fn register(self: *World, comptime args: anytype) !void {
-    const ArgsType = @TypeOf(args);
-    const args_type_info = @typeInfo(ArgsType);
-
-    const field_info = args_type_info.Struct.fields;
-    inline for (0..field_info.len) |i| {
-        const field = @field(args, field_info[i].name);
-        try self.components.append(ComponentDesc{ .size = @sizeOf(field), .alignment = @alignOf(field), .name = @typeName(field) });
-    }
+pub fn register(self: *World, allocator: std.mem.Allocator, comptime T: type) !void {
+    try self.components.append(allocator, ComponentDesc.get(T));
 }
 
 // [TODO] figure out how to store the parameter types
@@ -83,9 +82,9 @@ pub fn step(self: *World) !void {
     }
 }
 
-pub fn create(self: *World) !Entity {
-    defer self.maxEnt += 1;
-    return self.storage.addEntity(Entity{ .id = self.maxEnt });
+pub fn create(self: *World, allocator: std.mem.Allocator) !Entity {
+    defer self.nextEntity.id += 1;
+    return self.storage.addEntity(allocator, self.nextEntity);
 }
 
 pub fn set(self: *World, entity: Entity, comptime T: type, arg: T) !void {

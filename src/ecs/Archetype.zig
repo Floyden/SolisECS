@@ -17,6 +17,8 @@ pub const Edge = struct {
 
 entities: ArrayList(Entity),
 components: ArrayList(ComponentList),
+addTypeEdges: ArrayList(Edge),
+removeTypeEdges: ArrayList(Edge),
 
 fn typeLt(_: void, a: ComponentList, b: ComponentList) bool {
     return @intFromPtr(a.desc.id) < @intFromPtr(b.desc.id);
@@ -35,6 +37,8 @@ pub fn init(allocator: std.mem.Allocator, components: []const ComponentDesc) !Ar
     return Archetype{
         .entities = .empty,
         .components = componentVec,
+        .addTypeEdges = .empty,
+        .removeTypeEdges = .empty,
     };
 }
 
@@ -72,21 +76,31 @@ pub fn removeEntity(self: *Archetype, entity: Entity) void {
     _ = self.entities.swapRemove(index.?);
 }
 
-pub fn getTypeLocation(self: *const Archetype, T: type) ?usize {
+pub fn getTypeLocation(self: *const Archetype, id: type_id.TypeId) ?usize {
     for (self.components.items, 0..) |c, i| {
-        if (@intFromPtr(c.desc.id) == @intFromPtr(type_id.typeId(T))) {
+        if (c.desc.id == id) {
             return i;
         }
     }
     return null;
 }
 
-pub fn hasType(self: *const Archetype, T: type) bool {
-    return self.getTypeLocation(T) != null;
+pub fn hasType(self: *const Archetype, id: type_id.TypeId) bool {
+    return self.getTypeLocation(id) != null;
 }
 
 pub fn count(self: *const Archetype) usize {
     return self.entities.items.len;
+}
+
+pub fn expand(self: *const Archetype, allocator: std.mem.Allocator, component: ComponentDesc) void {
+    for (self.components.items, 0..) |c, i| {
+        if (@intFromPtr(c.desc.id) > @intFromPtr(component.id)) {
+            self.components.insert(allocator, i, .init(component));
+            return;
+        }
+    }
+    self.components.append(allocator, .init(component));
 }
 
 //---- Tests -----
@@ -128,12 +142,12 @@ test "Component Querying" {
     var archetype = try Archetype.init(gpa, &descs);
     defer archetype.deinit(gpa);
 
-    try testing.expect(archetype.hasType(TypeA));
-    try testing.expect(archetype.hasType(TypeB));
-    try testing.expect(!archetype.hasType(TypeC));
+    try testing.expect(archetype.hasType(type_id.typeId(TypeA)));
+    try testing.expect(archetype.hasType(type_id.typeId(TypeB)));
+    try testing.expect(!archetype.hasType(type_id.typeId(TypeC)));
 
-    const loc_a = archetype.getTypeLocation(TypeA);
-    const loc_b = archetype.getTypeLocation(TypeB);
+    const loc_a = archetype.getTypeLocation(type_id.typeId(TypeA));
+    const loc_b = archetype.getTypeLocation(type_id.typeId(TypeB));
 
     try testing.expect(loc_a != null);
     try testing.expect(loc_b != null);
