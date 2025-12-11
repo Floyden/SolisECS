@@ -1,6 +1,8 @@
 const std = @import("std");
 const ecs = @import("ecs.zig");
 const iter = @import("iter.zig");
+const single = @import("single.zig");
+const type_id = @import("type_id.zig");
 
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
@@ -19,6 +21,7 @@ systems: ArrayList(SystemDesc),
 storage: Storage,
 
 nextEntity: Entity,
+singletons: Entity,
 
 pub fn init(allocator: Allocator) !World {
     var world = World{
@@ -26,11 +29,11 @@ pub fn init(allocator: Allocator) !World {
         .components = .empty,
         .systems = .empty,
         .nextEntity = .{ .id = 1 },
-        .storage = Storage.init(allocator) catch unreachable,
+        .singletons = .{ .id = -1 },
+        .storage = undefined,
     };
 
-    try world.register(allocator, single.SingleUntyped);
-    world.singletons = try world.create(allocator);
+    world.storage = try .init(allocator, world.singletons);
 
     return world;
 }
@@ -47,6 +50,14 @@ pub fn deinit(self: *World) void {
 // [TODO] implement
 pub fn register(self: *World, allocator: std.mem.Allocator, comptime T: type) !void {
     try self.components.append(allocator, ComponentDesc.get(T));
+}
+
+pub fn setSingleton(self: *World, comptime T: type, arg: T) !*T {
+    return try self.storage.setSingleton(T, arg);
+}
+
+pub fn getSingleton(self: *World, comptime T: type) ?*T {
+    return self.storage.getMut(T, self.singletons);
 }
 
 // [TODO] figure out how to store the parameter types

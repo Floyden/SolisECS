@@ -12,14 +12,25 @@ const Storage = @This();
 allocator: Allocator,
 // TODO: Figure out how to store stable pointers
 archetypes: std.ArrayList(*Archetype),
+singletons: *Archetype,
 
-pub fn init(allocator: Allocator) !Storage {
+pub fn init(allocator: Allocator, singleton_entity: Entity) !Storage {
     var archetypes: std.ArrayList(*Archetype) = .empty;
     const empty_ptr = try allocator.create(Archetype);
     empty_ptr.* = Archetype.empty;
 
+    const singletons_ptr = try allocator.create(Archetype);
+    singletons_ptr.* = Archetype.empty;
+    try singletons_ptr.addEntity(allocator, singleton_entity);
+
     try archetypes.append(allocator, empty_ptr); // Create Archetype for empty entities
-    return Storage{ .allocator = allocator, .archetypes = archetypes };
+    try archetypes.append(allocator, singletons_ptr); // Create Archetype for empty entities
+
+    return Storage{
+        .allocator = allocator,
+        .archetypes = archetypes,
+        .singletons = singletons_ptr,
+    };
 }
 
 pub fn deinit(self: *Storage) void {
@@ -54,6 +65,27 @@ fn findArchetype(self: *Storage, entity: Entity) ?struct { index: usize, archety
     return null;
 }
 
+pub fn setSingleton(self: *Storage, comptime T: type, arg: T) !*T {
+    var idx_opt = self.singletons.getTypeLocation(T);
+    if (idx_opt == null) {
+        try self.singletons.expand(self.allocator, T);
+        idx_opt = self.singletons.getTypeLocation(T);
+    }
+
+    var component_list = self.singletons.components.items[idx_opt.?];
+    std.debug.assert(component_list.data.items.len == @sizeOf(T));
+    component_list.getMut(T)[0] = arg;
+    return &component_list.getMut(T)[0];
+}
+
+pub fn getSingleton(self: *Storage, comptime T: type) ?*T {
+    const idx_opt = self.singletons.getTypeLocation(T);
+    if (idx_opt) |idx| {
+        return &self.singletons.components.items[idx].getMut(T)[0];
+    }
+    return null;
+}
+
 pub fn get(self: *Storage, comptime T: type, entity: Entity) ?*const T {
     const location = self.findArchetype(entity).?;
     const source = location.archetype;
@@ -74,7 +106,7 @@ pub fn getMut(self: *Storage, comptime T: type, entity: Entity) ?*T {
 
     for (source.components.items) |*list| {
         if (list.desc.id == type_id.typeId(T)) {
-            return list.getMut(T, index);
+            return &list.getMut(T)[index];
         }
     }
     return null;

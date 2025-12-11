@@ -21,6 +21,10 @@ pub const List = struct {
         self.data.deinit(allocator);
     }
 
+    pub fn allocate(self: *List, allocator: std.mem.Allocator, comptime T: type, n: usize) !void {
+        try self.data.appendNTimes(allocator, 0, @sizeOf(T) * n);
+    }
+
     pub fn append(self: *List, allocator: std.mem.Allocator, comptime T: type, component: T) !void {
         const data: [*]const u8 = @ptrCast(@alignCast(&component));
         try self.data.appendSlice(allocator, data[0..@sizeOf(T)]);

@@ -110,14 +110,17 @@ pub fn count(self: *const Archetype) usize {
     return self.entities.items.len;
 }
 
-pub fn expand(self: *const Archetype, allocator: std.mem.Allocator, component: ComponentDesc) void {
+/// Adds another component to the current archetype. The newly allocated components are not initialized
+pub fn expand(self: *Archetype, allocator: std.mem.Allocator, comptime T: type) !void {
+    var new_list = ComponentList.init(.get(T));
+    try new_list.allocate(allocator, T, self.entities.items.len);
     for (self.components.items, 0..) |c, i| {
-        if (@intFromPtr(c.desc.id) > @intFromPtr(component.id)) {
-            self.components.insert(allocator, i, .init(component));
+        if (@intFromPtr(c.desc.id) > @intFromPtr(new_list.desc.id)) {
+            try self.components.insert(allocator, i, new_list);
             return;
         }
     }
-    self.components.append(allocator, .init(component));
+    try self.components.append(allocator, new_list);
 }
 
 //---- Tests -----
