@@ -1,9 +1,10 @@
 const std = @import("std");
+const solis_ecs = @import("solis_ecs");
 const ecs = @import("ecs.zig");
-const storage = @import("storage.zig");
-const World = ecs.World;
-const Archetype = storage.Archetype;
-const ComponentList = storage.ComponentList;
+const Storage = @import("Storage.zig");
+const World = solis_ecs.World;
+const Archetype = @import("Archetype.zig");
+const ComponentList = @import("components.zig").List;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 
@@ -48,10 +49,10 @@ pub const Iter = struct {
     }
 
     pub fn getMut(self: *const Iter, comptime T: type, loc: usize) []T {
-        return @as(*ComponentList, @alignCast(@ptrCast(self.components[loc]))).getMut(T);
+        return @as(*ComponentList, @ptrCast(@alignCast(self.components[loc]))).getMut(T);
     }
 
     pub fn get(self: *const Iter, comptime T: type, loc: usize) []const T {
-        return @as(*ComponentList, @alignCast(@ptrCast(self.components[loc]))).get(T);
+        return @as(*ComponentList, @ptrCast(@alignCast(self.components[loc]))).get(T);
     }
 };
