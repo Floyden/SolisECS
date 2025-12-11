@@ -71,7 +71,7 @@ pub fn step(self: *World) !void {
         var query = try Query.init(self.allocator, self, system.params.items);
         lArc: for (self.storage.archetypes.items) |*archetype| {
             for (system.params.items) |param| {
-                if (!archetype.hasType(param)) continue :lArc;
+                if (!archetype.hasTypeId(param)) continue :lArc;
             }
             try query.addArchetype(archetype);
         }

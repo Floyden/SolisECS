@@ -85,7 +85,7 @@ pub fn removeEntity(self: *Archetype, entity: Entity) void {
     _ = self.entities.swapRemove(index.?);
 }
 
-pub fn getTypeLocation(self: *const Archetype, id: type_id.TypeId) ?usize {
+pub fn getTypeIdLocation(self: *const Archetype, id: type_id.TypeId) ?usize {
     for (self.components.items, 0..) |c, i| {
         if (c.desc.id == id) {
             return i;
@@ -94,8 +94,16 @@ pub fn getTypeLocation(self: *const Archetype, id: type_id.TypeId) ?usize {
     return null;
 }
 
-pub fn hasType(self: *const Archetype, id: type_id.TypeId) bool {
-    return self.getTypeLocation(id) != null;
+pub fn getTypeLocation(self: *const Archetype, comptime T: type) ?usize {
+    return self.getTypeIdLocation(type_id.typeId(T));
+}
+
+pub fn hasType(self: *const Archetype, comptime T: type) bool {
+    return self.hasTypeId(type_id.typeId(T));
+}
+
+pub fn hasTypeId(self: *const Archetype, id: type_id.TypeId) bool {
+    return self.getTypeIdLocation(id) != null;
 }
 
 pub fn count(self: *const Archetype) usize {
@@ -151,12 +159,12 @@ test "Component Querying" {
     var archetype = try Archetype.init(gpa, &descs);
     defer archetype.deinit(gpa);
 
-    try testing.expect(archetype.hasType(type_id.typeId(TypeA)));
-    try testing.expect(archetype.hasType(type_id.typeId(TypeB)));
-    try testing.expect(!archetype.hasType(type_id.typeId(TypeC)));
+    try testing.expect(archetype.hasType(TypeA));
+    try testing.expect(archetype.hasType(TypeB));
+    try testing.expect(!archetype.hasType(TypeC));
 
-    const loc_a = archetype.getTypeLocation(type_id.typeId(TypeA));
-    const loc_b = archetype.getTypeLocation(type_id.typeId(TypeB));
+    const loc_a = archetype.getTypeLocation(TypeA);
+    const loc_b = archetype.getTypeLocation(TypeB);
 
     try testing.expect(loc_a != null);
     try testing.expect(loc_b != null);

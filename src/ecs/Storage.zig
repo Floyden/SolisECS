@@ -60,7 +60,7 @@ pub fn get(self: *Storage, comptime T: type, entity: Entity) ?*const T {
     const index = location.index;
 
     for (source.components.items) |*list| {
-        if (@intFromPtr(list.desc.name.ptr) == @intFromPtr(@typeName(T))) {
+        if (list.desc.id == type_id.typeId(T)) {
             return &list.get(T)[index];
         }
     }
@@ -73,7 +73,7 @@ pub fn getMut(self: *Storage, comptime T: type, entity: Entity) ?*T {
     const index = location.index;
 
     for (source.components.items) |*list| {
-        if (@intFromPtr(list.desc.name.ptr) == @intFromPtr(@typeName(T))) {
+        if (list.desc.id == type_id.typeId(T)) {
             return list.getMut(T, index);
         }
     }
@@ -82,11 +82,16 @@ pub fn getMut(self: *Storage, comptime T: type, entity: Entity) ?*T {
 
 pub fn setComponents(self: *Storage, entity: Entity, comptime T: type, arg: T) !void {
     // Find Archetype of the Entity
-    const location = self.findArchetype(entity);
-    std.debug.assert(location != null);
+    const location = self.findArchetype(entity) orelse return error.EntityNotFound;
+    const entityIdx = location.index;
+    var source = location.archetype;
 
-    const entityIdx = location.?.index;
-    var source = location.?.archetype;
+    // Overwrite existing entity
+    const component_idx_opt = source.getTypeLocation(T);
+    if (component_idx_opt) |idx| {
+        source.components.items[idx].getMut(T)[entityIdx] = arg;
+        return;
+    }
 
     // Find new destination
     var destination: ?*Archetype = null;
@@ -119,7 +124,7 @@ pub fn setComponents(self: *Storage, entity: Entity, comptime T: type, arg: T) !
     try destination.?.entities.append(self.allocator, entity);
 
     for (destination.?.components.items) |*component| {
-        const index = source.getTypeLocation(component.desc.id);
+        const index = source.getTypeIdLocation(component.desc.id);
         if (index == null) {
             try component.append(self.allocator, T, arg);
             continue;
