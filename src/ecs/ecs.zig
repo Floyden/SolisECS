@@ -29,19 +29,19 @@ pub const World = struct {
     pub fn init(allocator: Allocator) World {
         return World{
             .allocator = allocator,
-            .components = ArrayList(ComponentDesc).init(allocator),
-            .systems = ArrayList(SystemDesc).init(allocator),
+            .components = .empty,
+            .systems = .empty,
             .maxEnt = 1,
             .storage = Storage.init(allocator) catch unreachable,
         };
     }
 
-    pub fn deinit(self: *const World) void {
-        for (self.systems.items) |system| {
-            system.params.deinit();
+    pub fn deinit(self: *World) void {
+        for (self.systems.items) |*system| {
+            system.params.deinit(self.allocator);
         }
-        self.systems.deinit();
-        self.components.deinit();
+        self.systems.deinit(self.allocator);
+        self.components.deinit(self.allocator);
         self.storage.deinit();
     }
 

@@ -16,16 +16,16 @@ pub const ComponentList = struct {
     desc: ComponentDesc,
     data: ArrayList(usize),
 
-    pub fn init(allocator: Allocator, desc: ComponentDesc) ComponentList {
-        return ComponentList{ .desc = desc, .data = ArrayList(usize).init(allocator) };
+    pub fn init(desc: ComponentDesc) ComponentList {
+        return ComponentList{ .desc = desc, .data = .empty };
     }
 
-    pub fn deinit(self: *const ComponentList) void {
-        self.data.deinit();
+    pub fn deinit(self: *ComponentList, allocator: std.mem.Allocator) void {
+        self.data.deinit(allocator);
     }
 
     pub fn append(self: *ComponentList, comptime T: type, component: T) !void {
-        const data: [*]const usize = @alignCast(@ptrCast(&component));
+        const data: [*]const usize = @ptrCast(@alignCast(&component));
         const size = std.math.divCeil(usize, self.desc.size, @sizeOf(usize)) catch unreachable;
         try self.data.appendSlice(data[0..size]);
     }
@@ -55,17 +55,17 @@ pub const ComponentList = struct {
     pub fn get(self: *ComponentList, comptime T: type) []const T {
         const offset = std.math.divCeil(usize, self.desc.size, @sizeOf(usize)) catch unreachable;
         const count = self.data.items.len / offset;
-        return @as([*]const T, @alignCast(@ptrCast(self.data.items.ptr)))[0..count];
+        return @as([*]const T, @ptrCast(@alignCast(self.data.items.ptr)))[0..count];
     }
 
     pub fn getMut(self: *ComponentList, comptime T: type) []T {
         const offset = std.math.divCeil(usize, self.desc.size, @sizeOf(usize)) catch unreachable;
         const count = self.data.items.len / offset;
-        return @as([*]T, @alignCast(@ptrCast(self.data.items.ptr)))[0..count];
+        return @as([*]T, @ptrCast(@alignCast(self.data.items.ptr)))[0..count];
     }
 
     pub fn getSingleRaw(self: *ComponentList, index: usize) []const usize {
-        return @as([*]usize, @alignCast(@ptrCast(self.data.items.ptr)))[index .. index + 1];
+        return @as([*]usize, @ptrCast(@alignCast(self.data.items.ptr)))[index .. index + 1];
     }
 };
 
@@ -87,31 +87,31 @@ pub const Archetype = struct {
     }
 
     pub fn init(allocator: Allocator, components: []ComponentDesc) !Archetype {
-        var componentVec = ArrayList(ComponentList).init(allocator);
+        var componentVec: ArrayList(ComponentList) = .empty;
 
         for (components) |component| {
-            try componentVec.append(ComponentList.init(allocator, component));
+            try componentVec.append(allocator, ComponentList.init(component));
         }
 
         // Number of elements should be rather small, perfect for insertion sort
         std.sort.insertion(ComponentList, componentVec.items, {}, typeLt);
 
         return Archetype{
-            .entities = ArrayList(ecs.Entity).init(allocator),
+            .entities = .empty,
             .components = componentVec,
-            .addTypeEdges = ArrayList(ArchetypeEdge).init(allocator),
-            .removeTypeEdges = ArrayList(ArchetypeEdge).init(allocator),
+            .addTypeEdges = .empty,
+            .removeTypeEdges = .empty,
         };
     }
 
-    pub fn deinit(self: *Archetype) void {
-        self.entities.deinit();
+    pub fn deinit(self: *Archetype, allocator: std.mem.Allocator) void {
+        self.entities.deinit(allocator);
         for (self.components.items) |*list| {
-            list.deinit();
+            list.deinit(allocator);
         }
-        self.components.deinit();
-        self.removeTypeEdges.deinit();
-        self.addTypeEdges.deinit();
+        self.components.deinit(allocator);
+        self.removeTypeEdges.deinit(allocator);
+        self.addTypeEdges.deinit(allocator);
     }
 
     pub fn addEntity(self: *Archetype, entity: ecs.Entity) !void {
@@ -163,16 +163,16 @@ pub const Storage = struct {
     archetypes: ArrayList(Archetype),
 
     pub fn init(allocator: Allocator) !Storage {
-        var archetypes = ArrayList(Archetype).init(allocator);
-        try archetypes.append(try Archetype.init(allocator, &.{})); // Create Archetype for empty entities
+        var archetypes: ArrayList(Archetype) = .empty;
+        try archetypes.append(allocator, try Archetype.init(allocator, &.{})); // Create Archetype for empty entities
         return Storage{ .allocator = allocator, .archetypes = archetypes };
     }
 
-    pub fn deinit(self: *const Storage) void {
+    pub fn deinit(self: *Storage) void {
         for (self.archetypes.items) |*list| {
-            list.deinit();
+            list.deinit(self.allocator);
         }
-        self.archetypes.deinit();
+        self.archetypes.deinit(self.allocator);
     }
 
     pub fn addEntity(self: *Storage, entity: ecs.Entity) !ecs.Entity {
