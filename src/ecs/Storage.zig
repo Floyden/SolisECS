@@ -6,22 +6,26 @@ pub const Archetype = @import("Archetype.zig");
 const ComponentDesc = _component.Description;
 const ComponentList = _component.List;
 const Allocator = std.mem.Allocator;
-const ArrayList = std.ArrayList;
 
 const Storage = @This();
 
 allocator: Allocator,
-archetypes: ArrayList(Archetype),
+// TODO: Figure out how to store stable pointers
+archetypes: std.ArrayList(*Archetype),
 
 pub fn init(allocator: Allocator) !Storage {
-    var archetypes: ArrayList(Archetype) = .empty;
-    try archetypes.append(allocator, try Archetype.init(allocator, &.{})); // Create Archetype for empty entities
+    var archetypes: std.ArrayList(*Archetype) = .empty;
+    const empty_ptr = try allocator.create(Archetype);
+    empty_ptr.* = Archetype.empty;
+
+    try archetypes.append(allocator, empty_ptr); // Create Archetype for empty entities
     return Storage{ .allocator = allocator, .archetypes = archetypes };
 }
 
 pub fn deinit(self: *Storage) void {
-    for (self.archetypes.items) |*list| {
+    for (self.archetypes.items) |list| {
         list.deinit(self.allocator);
+        self.allocator.destroy(list);
     }
     self.archetypes.deinit(self.allocator);
 }
@@ -44,7 +48,7 @@ pub fn removeMarked(self: *Storage) void {
 fn findArchetype(self: *Storage, entity: Entity) ?struct { index: usize, archetype: *Archetype } {
     for (0..self.archetypes.items.len) |i| {
         if (self.archetypes.items[i].findEntity(entity)) |value| {
-            return .{ .index = value, .archetype = &self.archetypes.items[i] };
+            return .{ .index = value, .archetype = self.archetypes.items[i] };
         }
     }
     return null;
@@ -102,8 +106,10 @@ pub fn setComponents(self: *Storage, entity: Entity, comptime T: type, arg: T) !
         }
         types[source.components.items.len] = ComponentDesc{ .size = @sizeOf(T), .alignment = @alignOf(T), .id = type_id.typeId(T) };
 
-        try self.archetypes.append(self.allocator, try Archetype.init(self.allocator, types));
-        var dest = &self.archetypes.items[self.archetypes.items.len - 1];
+        const new_archetype = try self.allocator.create(Archetype);
+        new_archetype.* = try Archetype.init(self.allocator, types);
+        try self.archetypes.append(self.allocator, new_archetype);
+        var dest = self.archetypes.items[self.archetypes.items.len - 1];
         try dest.removeTypeEdges.append(self.allocator, Archetype.Edge{ .from = dest, .to = source, .typeName = @typeName(T) });
         try source.addTypeEdges.append(self.allocator, Archetype.Edge{ .from = source, .to = dest, .typeName = @typeName(T) });
         destination = dest;

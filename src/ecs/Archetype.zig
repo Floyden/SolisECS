@@ -15,6 +15,13 @@ pub const Edge = struct {
     typeName: [:0]const u8,
 };
 
+pub const empty = Archetype{
+    .entities = .empty,
+    .components = .empty,
+    .addTypeEdges = .empty,
+    .removeTypeEdges = .empty,
+};
+
 entities: ArrayList(Entity),
 components: ArrayList(ComponentList),
 addTypeEdges: ArrayList(Edge),
