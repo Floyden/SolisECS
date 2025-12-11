@@ -1,4 +1,5 @@
 const std = @import("std");
+const type_id = @import("type_id.zig");
 const ArrayList = std.ArrayList;
 
 pub const List = struct {
@@ -22,7 +23,11 @@ pub const List = struct {
         try self.data.appendSlice(allocator, component);
     }
 
-    fn swapRemoveRaw(self: *List, index: usize, dest: *[]u8) void {
+    pub fn appendEmpty(self: *List, allocator: std.mem.Allocator) !void {
+        try self.data.appendNTimes(allocator, 0, self.desc.size);
+    }
+
+    pub fn swapRemoveRaw(self: *List, index: usize, dest: *[]u8) void {
         var i = self.desc.size;
         while (i > 0) {
             i -= 1;
@@ -30,7 +35,7 @@ pub const List = struct {
         }
     }
 
-    fn swapDelete(self: *List, index: usize) void {
+    pub fn swapRemove(self: *List, index: usize) void {
         var i = self.desc.size;
         while (i > 0) {
             i -= 1;
@@ -39,30 +44,32 @@ pub const List = struct {
     }
 
     pub fn get(self: *List, comptime T: type) []const T {
-        const count = self.data.items.len / self.desc.size;
-        return @as([*]const T, @ptrCast(@alignCast(self.data.items.ptr)))[0..count];
+        return @as([*]const T, @ptrCast(@alignCast(self.data.items.ptr)))[0..self.count()];
     }
 
     pub fn getMut(self: *List, comptime T: type) []T {
-        const count = self.data.items.len / self.desc.size;
-        return @as([*]T, @ptrCast(@alignCast(self.data.items.ptr)))[0..count];
+        return @as([*]T, @ptrCast(@alignCast(self.data.items.ptr)))[0..self.count()];
     }
 
     pub fn getSingleRaw(self: *List, index: usize) []const u8 {
         return @as([*]u8, @ptrCast(@alignCast(self.data.items.ptr)))[index .. index + self.desc.size];
+    }
+
+    pub fn count(self: List) usize {
+        return self.data.items.len / self.desc.size;
     }
 };
 
 pub const Description = struct {
     size: usize,
     alignment: usize,
-    name: [:0]const u8,
+    id: type_id.TypeId,
 
     pub fn get(T: type) Description {
         return .{
             .size = @sizeOf(T),
             .alignment = @alignOf(T),
-            .name = @typeName(T),
+            .id = type_id.typeId(T),
         };
     }
 };
