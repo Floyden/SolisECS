@@ -16,7 +16,7 @@ pub const Query = iter.Query;
 const World = @This();
 
 allocator: Allocator,
-components: ArrayList(ComponentDesc),
+components: std.AutoHashMapUnmanaged(ComponentDesc, void),
 systems: ArrayList(SystemDesc),
 storage: Storage,
 
@@ -49,10 +49,11 @@ pub fn deinit(self: *World) void {
 
 // [TODO] implement
 pub fn register(self: *World, allocator: std.mem.Allocator, comptime T: type) !void {
-    try self.components.append(allocator, ComponentDesc.get(T));
+    try self.components.put(allocator, ComponentDesc.get(T), {});
 }
 
 pub fn setSingleton(self: *World, comptime T: type, arg: T) !*T {
+    try self.components.put(self.allocator, ComponentDesc.get(T), {});
     return try self.storage.setSingleton(T, arg);
 }
 
