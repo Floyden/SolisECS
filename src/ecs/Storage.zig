@@ -56,7 +56,7 @@ pub fn removeMarked(self: *Storage) void {
     _ = self;
 }
 
-fn findArchetype(self: *Storage, entity: Entity) ?struct { index: usize, archetype: *Archetype } {
+fn findArchetype(self: *const Storage, entity: Entity) ?struct { index: usize, archetype: *Archetype } {
     for (0..self.archetypes.items.len) |i| {
         if (self.archetypes.items[i].findEntity(entity)) |value| {
             return .{ .index = value, .archetype = self.archetypes.items[i] };
@@ -78,7 +78,7 @@ pub fn setSingleton(self: *Storage, comptime T: type, arg: T) !*T {
     return &component_list.getMut(T)[0];
 }
 
-pub fn getSingleton(self: *Storage, comptime T: type) ?*T {
+pub fn getSingleton(self: *const Storage, comptime T: type) ?*T {
     const idx_opt = self.singletons.getTypeLocation(T);
     if (idx_opt) |idx| {
         return &self.singletons.components.items[idx].getMut(T)[0];
@@ -86,7 +86,7 @@ pub fn getSingleton(self: *Storage, comptime T: type) ?*T {
     return null;
 }
 
-pub fn get(self: *Storage, comptime T: type, entity: Entity) ?*const T {
+pub fn get(self: *const Storage, comptime T: type, entity: Entity) ?*const T {
     const location = self.findArchetype(entity).?;
     const source = location.archetype;
     const index = location.index;
@@ -101,7 +101,7 @@ pub fn get(self: *Storage, comptime T: type, entity: Entity) ?*const T {
     return null;
 }
 
-pub fn getMut(self: *Storage, comptime T: type, entity: Entity) ?*T {
+pub fn getMut(self: *const Storage, comptime T: type, entity: Entity) ?*T {
     const location = self.findArchetype(entity).?;
     const source = location.archetype;
     const index = location.index;

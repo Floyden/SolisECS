@@ -54,19 +54,19 @@ pub const List = struct {
         }
     }
 
-    pub fn get(self: *List, comptime T: type) []const T {
+    pub fn get(self: *const List, comptime T: type) []const T {
         return @as([*]const T, @ptrCast(@alignCast(self.data.items.ptr)))[0..self.count()];
     }
 
-    pub fn getMut(self: *List, comptime T: type) []T {
+    pub fn getMut(self: *const List, comptime T: type) []T {
         return @as([*]T, @ptrCast(@alignCast(self.data.items.ptr)))[0..self.count()];
     }
 
-    pub fn getSingleRaw(self: *List, index: usize) []const u8 {
+    pub fn getSingleRaw(self: *const List, index: usize) []const u8 {
         return @as([*]u8, @ptrCast(@alignCast(self.data.items.ptr)))[index .. index + self.desc.size];
     }
 
-    pub fn count(self: List) usize {
+    pub fn count(self: *const List) usize {
         if (self.desc.size > 1) {
             return self.data.items.len / self.desc.size;
         } else {
