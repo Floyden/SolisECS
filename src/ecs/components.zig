@@ -47,18 +47,11 @@ pub const List = struct {
     }
 
     pub fn appendEmpty(self: *List, allocator: std.mem.Allocator) !void {
-        try self.data.appendNTimes(allocator, 0, self.desc.size);
-    }
-
-    pub fn swapRemoveRaw(self: *List, index: usize, dest: *[]u8) void {
-        var i = self.desc.size;
-        if (i == 0)
-            self.data.items.len -= 1;
-
-        while (i > 0) {
-            i -= 1;
-            dest.*[i] = self.data.swapRemove(index * self.desc.size + i);
+        if (self.desc.size == 0) {
+            self.data.items.len += 1;
+            return;
         }
+        try self.data.appendNTimes(allocator, 0, self.desc.size);
     }
 
     pub fn swapRemove(self: *List, index: usize) void {
