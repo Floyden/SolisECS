@@ -22,10 +22,22 @@ pub const List = struct {
     }
 
     pub fn allocate(self: *List, allocator: std.mem.Allocator, comptime T: type, n: usize) !void {
-        try self.data.appendNTimes(allocator, 0, @sizeOf(T) * n);
+        std.debug.assert(self.desc.id == type_id.typeId(T));
+
+        if (comptime @sizeOf(T) == 0) {
+            self.data.items.len += n;
+        } else {
+            try self.data.appendNTimes(allocator, 0, @sizeOf(T) * n);
+        }
     }
 
     pub fn append(self: *List, allocator: std.mem.Allocator, comptime T: type, component: T) !void {
+        std.debug.assert(self.desc.id == type_id.typeId(T));
+        if (comptime @sizeOf(T) == 0) {
+            self.data.items.len += 1;
+            return;
+        }
+
         const data: [*]const u8 = @ptrCast(@alignCast(&component));
         try self.data.appendSlice(allocator, data[0..@sizeOf(T)]);
     }
@@ -40,6 +52,9 @@ pub const List = struct {
 
     pub fn swapRemoveRaw(self: *List, index: usize, dest: *[]u8) void {
         var i = self.desc.size;
+        if (i == 0)
+            self.data.items.len -= 1;
+
         while (i > 0) {
             i -= 1;
             dest.*[i] = self.data.swapRemove(index * self.desc.size + i);
@@ -48,6 +63,9 @@ pub const List = struct {
 
     pub fn swapRemove(self: *List, index: usize) void {
         var i = self.desc.size;
+        if (i == 0)
+            self.data.items.len -= 1;
+
         while (i > 0) {
             i -= 1;
             _ = self.data.swapRemove(index * self.desc.size + i);
@@ -55,10 +73,12 @@ pub const List = struct {
     }
 
     pub fn get(self: *const List, comptime T: type) []const T {
+        std.debug.assert(self.desc.id == type_id.typeId(T));
         return @as([*]const T, @ptrCast(@alignCast(self.data.items.ptr)))[0..self.count()];
     }
 
     pub fn getMut(self: *const List, comptime T: type) []T {
+        std.debug.assert(self.desc.id == type_id.typeId(T));
         return @as([*]T, @ptrCast(@alignCast(self.data.items.ptr)))[0..self.count()];
     }
 
@@ -121,4 +141,20 @@ test "Basic" {
     try std.testing.expect(values.len == 2);
     try std.testing.expectEqual(Position{ .x = 12, .y = -42, .z = -7 }, values[0]);
     try std.testing.expectEqual(b, values[1]);
+}
+
+test "Zero sized types" {
+    const Tag = struct {};
+    const allocator = std.testing.allocator;
+
+    var list = List.init(Description.get(Tag));
+    defer list.deinit(allocator);
+
+    try list.append(allocator, Tag, .{});
+    try list.append(allocator, Tag, .{});
+
+    const values = list.getMut(Tag);
+    try std.testing.expectEqual(2, values.len);
+    try std.testing.expectEqual(Tag{}, values[0]);
+    try std.testing.expectEqual(Tag{}, values[1]);
 }
