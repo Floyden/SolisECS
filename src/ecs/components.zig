@@ -67,7 +67,11 @@ pub const List = struct {
     }
 
     pub fn count(self: List) usize {
-        return self.data.items.len / self.desc.size;
+        if (self.desc.size > 1) {
+            return self.data.items.len / self.desc.size;
+        } else {
+            return self.data.items.len;
+        }
     }
 };
 

@@ -93,6 +93,8 @@ pub fn get(self: *Storage, comptime T: type, entity: Entity) ?*const T {
 
     for (source.components.items) |*list| {
         if (list.desc.id == type_id.typeId(T)) {
+            if (@sizeOf(T) == 0)
+                return @ptrCast(list.get(T));
             return &list.get(T)[index];
         }
     }
@@ -106,6 +108,9 @@ pub fn getMut(self: *Storage, comptime T: type, entity: Entity) ?*T {
 
     for (source.components.items) |*list| {
         if (list.desc.id == type_id.typeId(T)) {
+            if (@sizeOf(T) == 0)
+                return @ptrCast(list.getMut(T));
+
             return &list.getMut(T)[index];
         }
     }
