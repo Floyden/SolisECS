@@ -128,7 +128,7 @@ pub fn setComponents(self: *Storage, entity: Entity, comptime T: type, arg: T) !
     // Find new destination
     var destination: ?*Archetype = null;
     for (source.addTypeEdges.items) |edge| {
-        if (@intFromPtr(edge.typeName.ptr) == @intFromPtr(@typeName(T))) {
+        if (edge.id == type_id.typeId(T)) {
             destination = edge.to;
             break;
         }
@@ -147,8 +147,8 @@ pub fn setComponents(self: *Storage, entity: Entity, comptime T: type, arg: T) !
         new_archetype.* = try Archetype.init(self.allocator, types);
         try self.archetypes.append(self.allocator, new_archetype);
         var dest = self.archetypes.items[self.archetypes.items.len - 1];
-        try dest.removeTypeEdges.append(self.allocator, Archetype.Edge{ .from = dest, .to = source, .typeName = @typeName(T) });
-        try source.addTypeEdges.append(self.allocator, Archetype.Edge{ .from = source, .to = dest, .typeName = @typeName(T) });
+        try dest.removeTypeEdges.append(self.allocator, Archetype.Edge{ .from = dest, .to = source, .id = type_id.typeId(T) });
+        try source.addTypeEdges.append(self.allocator, Archetype.Edge{ .from = source, .to = dest, .id = type_id.typeId(T) });
         destination = dest;
     }
 

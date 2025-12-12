@@ -12,7 +12,7 @@ const Archetype = @This();
 pub const Edge = struct {
     from: *Archetype,
     to: *Archetype,
-    typeName: [:0]const u8,
+    id: type_id.TypeId,
 };
 
 pub const empty = Archetype{
