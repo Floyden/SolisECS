@@ -10,6 +10,7 @@ const Entity = @import("Entity.zig");
 const ComponentDesc = @import("components.zig").Description;
 const SystemDesc = ecs.SystemDesc;
 const Storage = @import("Storage.zig");
+const pairs = @import("pairs.zig");
 pub const Iter = iter.Iter;
 pub const Query = iter.Query;
 
@@ -19,6 +20,7 @@ allocator: Allocator,
 components: std.AutoHashMapUnmanaged(ComponentDesc, void),
 systems: ArrayList(SystemDesc),
 storage: Storage,
+pairStorage: pairs.Storage,
 
 nextEntity: Entity,
 singletons: Entity,
@@ -31,6 +33,7 @@ pub fn init(allocator: Allocator) !World {
         .nextEntity = .{ .id = 1 },
         .singletons = .{ .id = -1 },
         .storage = undefined,
+        .pairStorage = .empty,
     };
 
     world.storage = try .init(allocator, world.singletons);
@@ -44,6 +47,7 @@ pub fn deinit(self: *World) void {
     }
     self.systems.deinit(self.allocator);
     self.components.deinit(self.allocator);
+    self.pairStorage.deinit(self.allocator);
     self.storage.deinit();
 }
 
@@ -59,6 +63,18 @@ pub fn setSingleton(self: *World, comptime T: type, arg: T) !*T {
 
 pub fn getSingleton(self: *World, comptime T: type) ?*T {
     return self.storage.getMut(T, self.singletons);
+}
+
+pub fn addPair(self: *World, a: Entity, comptime R: type, b: Entity) !void {
+    try self.pairStorage.add(self.allocator, .{ .src = a, .dst = b, .relation = type_id.typeId(R) });
+}
+
+pub fn removePair(self: *World, a: Entity, comptime R: type, b: Entity) void {
+    self.pairStorage.remove(.{ .src = a, .dst = b, .relation = type_id.typeId(R) });
+}
+
+pub fn hasPair(self: *World, a: Entity, comptime R: type, b: Entity) bool {
+    return self.pairStorage.contains(.{ .src = a, .dst = b, .relation = type_id.typeId(R) });
 }
 
 // [TODO] figure out how to store the parameter types
