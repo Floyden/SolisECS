@@ -1,6 +1,5 @@
 const std = @import("std");
 const ecs = @import("ecs.zig");
-const iter = @import("iter.zig");
 const single = @import("single.zig");
 const type_id = @import("type_id.zig");
 
@@ -10,8 +9,6 @@ const Entity = @import("Entity.zig");
 const ComponentDesc = @import("components.zig").Description;
 const Storage = @import("Storage.zig");
 const pairs = @import("pairs.zig");
-pub const Iter = iter.Iter;
-pub const Query = iter.Query;
 
 const World = @This();
 
