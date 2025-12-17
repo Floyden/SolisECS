@@ -8,7 +8,6 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Entity = @import("Entity.zig");
 const ComponentDesc = @import("components.zig").Description;
-const SystemDesc = ecs.SystemDesc;
 const Storage = @import("Storage.zig");
 const pairs = @import("pairs.zig");
 pub const Iter = iter.Iter;
@@ -18,7 +17,6 @@ const World = @This();
 
 allocator: Allocator,
 components: std.AutoHashMapUnmanaged(ComponentDesc, void),
-systems: ArrayList(SystemDesc),
 storage: Storage,
 pairStorage: pairs.Storage,
 
@@ -29,7 +27,6 @@ pub fn init(allocator: Allocator) !World {
     var world = World{
         .allocator = allocator,
         .components = .empty,
-        .systems = .empty,
         .nextEntity = .{ .id = 1 },
         .singletons = .{ .id = -1 },
         .storage = undefined,
@@ -42,10 +39,6 @@ pub fn init(allocator: Allocator) !World {
 }
 
 pub fn deinit(self: *World) void {
-    for (self.systems.items) |*system| {
-        system.params.deinit(self.allocator);
-    }
-    self.systems.deinit(self.allocator);
     self.components.deinit(self.allocator);
     self.pairStorage.deinit(self.allocator);
     self.storage.deinit();
@@ -75,39 +68,6 @@ pub fn removePair(self: *World, a: Entity, comptime R: type, b: Entity) void {
 
 pub fn hasPair(self: *World, a: Entity, comptime R: type, b: Entity) bool {
     return self.pairStorage.contains(.{ .src = a, .dst = b, .relation = type_id.typeId(R) });
-}
-
-// [TODO] figure out how to store the parameter types
-pub fn addSystem(self: *World, callback: fn (*Iter) void, comptime args: anytype) !void {
-    const ArgsType = @TypeOf(args);
-    const args_type_info = @typeInfo(ArgsType);
-
-    const field_info = args_type_info.Struct.fields;
-    var desc = SystemDesc{ .callback = callback, .params = undefined };
-    desc.params = ArrayList([:0]const u8).init(self.allocator);
-
-    inline for (0..field_info.len) |i| {
-        const field = @field(args, field_info[i].name);
-        try desc.params.append(@typeName(field));
-    }
-
-    try self.systems.append(desc);
-}
-
-pub fn step(self: *World) !void {
-    for (self.systems.items) |*system| {
-        var query = try Query.init(self.allocator, self, system.params.items);
-        lArc: for (self.storage.archetypes.items) |*archetype| {
-            for (system.params.items) |param| {
-                if (!archetype.hasTypeId(param)) continue :lArc;
-            }
-            try query.addArchetype(archetype);
-        }
-        for (0..query.archetypes.items.len) |i| {
-            var it = query.iter(i);
-            system.callback(&it);
-        }
-    }
 }
 
 pub fn create(self: *World, allocator: std.mem.Allocator) !Entity {
