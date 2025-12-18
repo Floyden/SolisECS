@@ -18,54 +18,68 @@ fn parseTupleTypes(comptime tuple: anytype) [@typeInfo(@TypeOf(tuple)).@"struct"
     };
     return type_array;
 }
+
+pub fn ComponentBindings(comptime types: []const type) type {
+    var res: [types.len]type = undefined;
+    for (types, &res) |T, *R| {
+        const info = @typeInfo(T);
+        if (info == .pointer) {
+            if (info.pointer.is_const) {
+                R.* = []const info.pointer.child;
+            } else {
+                R.* = []info.pointer.child;
+            }
+        } else {
+            R.* = []const T;
+        }
+    }
+    return std.meta.Tuple(&res);
+}
 pub fn Iter(comptime Q: anytype) type {
     return struct {
         const Self = @This();
-        pub const Components = Q.Components;
         pub const ComponentArray = Q.ComponentArray;
+        pub const ComponentBinding = ComponentBindings(&ComponentArray);
 
         query: *const Q,
         entity: Entity,
         archetype: usize,
-        component: usize,
+        binding: ComponentBinding,
 
         pub fn create(query: *const Q) Self {
             return .{
                 .query = query,
                 .entity = .none,
                 .archetype = 0,
-                .component = 0,
+                .binding = undefined,
             };
         }
 
-        fn createBinding(self: Self) std.meta.Tuple(&ComponentArray) {
+        fn createBinding(self: *Self) void {
             std.debug.assert(self.query.archetypes.items.len > self.archetype);
             const archetype = self.query.archetypes.items[self.archetype];
-            std.debug.assert(archetype.count() > self.component);
 
-            var binding: std.meta.Tuple(&ComponentArray) = undefined;
-            inline for (&binding) |*bind| {
+            inline for (&self.binding) |*bind| {
                 const T = @TypeOf(bind.*);
                 const info = @typeInfo(T);
                 if (info == .pointer) {
-                    bind.* = &archetype.getComponentsMut(info.pointer.child).?[self.component];
+                    if (info.pointer.is_const) {
+                        bind.* = archetype.getComponents(info.pointer.child).?;
+                    } else {
+                        bind.* = archetype.getComponentsMut(info.pointer.child).?;
+                    }
                 } else {
-                    bind.* = archetype.getComponentsMut(T).?[self.component];
+                    bind.* = archetype.getComponentsMut(T).?;
                 }
             }
-            return binding;
         }
 
-        pub fn next(self: *Self) ?std.meta.Tuple(&ComponentArray) {
+        pub fn next(self: *Self) ?ComponentBinding {
             const archetypes = self.query.archetypes.items;
             while (archetypes.len > self.archetype) {
-                if (archetypes[self.archetype].count() > self.component) {
-                    defer self.component += 1;
-                    self.entity = archetypes[self.archetype].entities.items[self.component];
-                    return self.createBinding();
-                }
-                self.archetype += 1;
-                self.component = 0;
+                self.createBinding();
+                defer self.archetype += 1;
+                return self.binding;
             }
             self.entity = .none;
             return null;
@@ -80,9 +94,7 @@ pub fn Query(components: anytype, filters: anytype) type {
         pub const ComponentArray = parseTupleTypes(components);
         pub const FilterArray = parseTupleTypes(filters);
 
-        // world: *World,
         archetypes: std.ArrayList(*Archetype),
-        // pointers: std.ArrayList([ComponentArray.len]*anyopaque),
 
         pub fn init(gpa: std.mem.Allocator, world: *World) !Self {
             var res: Self = .{ .archetypes = .empty };

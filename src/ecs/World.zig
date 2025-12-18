@@ -81,5 +81,3 @@ pub fn get(self: *World, entity: Entity, comptime T: type) ?*const T {
 pub fn getMut(self: *World, entity: Entity, comptime T: type) ?*T {
     return self.storage.getMut(T, entity);
 }
-
-// pub fn addSystem(self: *World,
