@@ -82,3 +82,15 @@ pub fn get(self: *World, entity: Entity, comptime T: type) ?*const T {
 pub fn getMut(self: *World, entity: Entity, comptime T: type) ?*T {
     return self.storage.getMut(T, entity);
 }
+
+pub const SystemDesc = struct {
+    // Stage
+    // dependencies
+};
+
+pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: SystemDesc) void {
+    _ = self;
+    _ = gpa;
+    _ = system;
+    _ = desc;
+}
