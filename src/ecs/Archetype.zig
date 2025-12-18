@@ -106,6 +106,16 @@ pub fn hasTypeId(self: *const Archetype, id: type_id.TypeId) bool {
     return self.getTypeIdLocation(id) != null;
 }
 
+pub fn getComponents(self: *const Archetype, comptime T: type) ?[]const T {
+    const index = self.getTypeLocation(T) orelse return null;
+    return self.components.items[index].getMut(T);
+}
+
+pub fn getComponentsMut(self: *const Archetype, comptime T: type) ?[]T {
+    const index = self.getTypeLocation(T) orelse return null;
+    return self.components.items[index].getMut(T);
+}
+
 pub fn count(self: *const Archetype) usize {
     return self.entities.items.len;
 }
