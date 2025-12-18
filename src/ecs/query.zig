@@ -1,6 +1,7 @@
 const std = @import("std");
 const Archetype = @import("Archetype.zig");
 const World = @import("World.zig");
+const Entity = @import("Entity.zig");
 
 fn parseTupleTypes(comptime tuple: anytype) [@typeInfo(@TypeOf(tuple)).@"struct".fields.len]type {
     const TupleType = @TypeOf(tuple);
@@ -18,14 +19,41 @@ fn parseTupleTypes(comptime tuple: anytype) [@typeInfo(@TypeOf(tuple)).@"struct"
     return type_array;
 }
 
-// pub fn Iter(components: anytype) type {
-//     return struct {
-//         const Self = @This();
-//         pub const ComponentArray = parseTupleTypes(components);
-//
-//
-//     };
-// }
+pub fn Iter(Q: anytype) type {
+    return struct {
+        const Self = @This();
+        pub const ComponentArray = Q.ComponentArray;
+
+        query: *const Q,
+        entity: Entity,
+        archetype: usize,
+        component: usize,
+
+        pub fn create(query: *const Q) Self {
+            return .{
+                .query = query,
+                .entity = .none,
+                .archetype = 0,
+                .component = 0,
+            };
+        }
+
+        pub fn next(self: *Self) ?void {
+            const archetypes = self.query.archetypes.items;
+            while (archetypes.len > self.archetype) {
+                if (archetypes[self.archetype].count() > self.component) {
+                    defer self.component += 1;
+                    self.entity = archetypes[self.archetype].entities.items[self.component];
+                    return;
+                }
+                self.archetype += 1;
+                self.component = 0;
+            }
+            self.entity = .none;
+            return null;
+        }
+    };
+}
 
 pub fn Query(components: anytype, filters: anytype) type {
     return struct {
@@ -43,6 +71,7 @@ pub fn Query(components: anytype, filters: anytype) type {
                 if (archetype.components.items.len < ComponentArray.len) continue;
                 std.log.debug("{}", .{archetype.components});
 
+                // skip archetypes which do not contain the component
                 inline for (ComponentArray) |component| {
                     const info = @typeInfo(component);
                     if (info == .pointer and !archetype.hasType(info.pointer.child)) {
