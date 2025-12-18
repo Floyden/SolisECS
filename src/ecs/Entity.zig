@@ -1,5 +1,8 @@
 const Self = @This();
 
+id: isize,
+
 pub const none: Self = .{ .id = 0 };
 
-id: isize,
+// Internal Entities
+pub const singletons: Self = .{ .id = -1 };
