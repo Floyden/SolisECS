@@ -18,19 +18,17 @@ storage: Storage,
 pairStorage: pairs.Storage,
 
 nextEntity: Entity,
-singletons: Entity,
 
 pub fn init(allocator: Allocator) !World {
     var world = World{
         .allocator = allocator,
         .components = .empty,
         .nextEntity = .{ .id = 1 },
-        .singletons = .{ .id = -1 },
         .storage = undefined,
         .pairStorage = .empty,
     };
 
-    world.storage = try .init(allocator, world.singletons);
+    world.storage = try .init(allocator);
 
     return world;
 }
@@ -52,7 +50,7 @@ pub fn setSingleton(self: *World, comptime T: type, arg: T) !*T {
 }
 
 pub fn getSingleton(self: *World, comptime T: type) ?*T {
-    return self.storage.getMut(T, self.singletons);
+    return self.storage.getMut(T, .singletons);
 }
 
 pub fn addPair(self: *World, a: Entity, comptime R: type, b: Entity) !void {
@@ -83,3 +81,5 @@ pub fn get(self: *World, entity: Entity, comptime T: type) ?*const T {
 pub fn getMut(self: *World, entity: Entity, comptime T: type) ?*T {
     return self.storage.getMut(T, entity);
 }
+
+// pub fn addSystem(self: *World,

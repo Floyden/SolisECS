@@ -14,17 +14,17 @@ allocator: Allocator,
 archetypes: std.ArrayList(*Archetype),
 singletons: *Archetype,
 
-pub fn init(allocator: Allocator, singleton_entity: Entity) !Storage {
+pub fn init(allocator: Allocator) !Storage {
     var archetypes: std.ArrayList(*Archetype) = .empty;
     const empty_ptr = try allocator.create(Archetype);
     empty_ptr.* = Archetype.empty;
 
     const singletons_ptr = try allocator.create(Archetype);
     singletons_ptr.* = Archetype.empty;
-    try singletons_ptr.addEntity(allocator, singleton_entity);
+    try singletons_ptr.addEntity(allocator, .singletons);
 
     try archetypes.append(allocator, empty_ptr); // Create Archetype for empty entities
-    try archetypes.append(allocator, singletons_ptr); // Create Archetype for empty entities
+    try archetypes.append(allocator, singletons_ptr); // Create Archetype for singletons
 
     return Storage{
         .allocator = allocator,
