@@ -18,10 +18,10 @@ fn parseTupleTypes(comptime tuple: anytype) [@typeInfo(@TypeOf(tuple)).@"struct"
     };
     return type_array;
 }
-
-pub fn Iter(Q: anytype) type {
+pub fn Iter(comptime Q: anytype) type {
     return struct {
         const Self = @This();
+        pub const Components = Q.Components;
         pub const ComponentArray = Q.ComponentArray;
 
         query: *const Q,
@@ -38,13 +38,31 @@ pub fn Iter(Q: anytype) type {
             };
         }
 
-        pub fn next(self: *Self) ?void {
+        fn createBinding(self: Self) std.meta.Tuple(&ComponentArray) {
+            std.debug.assert(self.query.archetypes.items.len > self.archetype);
+            const archetype = self.query.archetypes.items[self.archetype];
+            std.debug.assert(archetype.count() > self.component);
+
+            var binding: std.meta.Tuple(&ComponentArray) = undefined;
+            inline for (&binding) |*bind| {
+                const T = @TypeOf(bind.*);
+                const info = @typeInfo(T);
+                if (info == .pointer) {
+                    bind.* = &archetype.getComponentsMut(info.pointer.child).?[self.component];
+                } else {
+                    bind.* = archetype.getComponentsMut(T).?[self.component];
+                }
+            }
+            return binding;
+        }
+
+        pub fn next(self: *Self) ?std.meta.Tuple(&ComponentArray) {
             const archetypes = self.query.archetypes.items;
             while (archetypes.len > self.archetype) {
                 if (archetypes[self.archetype].count() > self.component) {
                     defer self.component += 1;
                     self.entity = archetypes[self.archetype].entities.items[self.component];
-                    return;
+                    return self.createBinding();
                 }
                 self.archetype += 1;
                 self.component = 0;
@@ -58,6 +76,7 @@ pub fn Iter(Q: anytype) type {
 pub fn Query(components: anytype, filters: anytype) type {
     return struct {
         const Self = @This();
+        pub const Components = components;
         pub const ComponentArray = parseTupleTypes(components);
         pub const FilterArray = parseTupleTypes(filters);
 
@@ -69,7 +88,6 @@ pub fn Query(components: anytype, filters: anytype) type {
             var res: Self = .{ .archetypes = .empty };
             outer: for (world.storage.archetypes.items) |archetype| {
                 if (archetype.components.items.len < ComponentArray.len) continue;
-                std.log.debug("{}", .{archetype.components});
 
                 // skip archetypes which do not contain the component
                 inline for (ComponentArray) |component| {
@@ -82,11 +100,6 @@ pub fn Query(components: anytype, filters: anytype) type {
                 }
 
                 try res.archetypes.append(gpa, archetype);
-                // try res.pointers.append(gpa, undefined);
-                // var back = res.pointers.getLast();
-                // inline for (ComponentArray, 0..) |component, i| {
-                //     back[i] = @ptrCast(archetype.getComponents(component).?);
-                // }
             }
             return res;
         }
