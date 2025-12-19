@@ -88,9 +88,53 @@ pub const SystemDesc = struct {
     // dependencies
 };
 
-pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: SystemDesc) void {
-    _ = self;
-    _ = gpa;
-    _ = system;
+pub const System = struct {
+    callback: *const fn (*anyopaque) void,
+    context: *anyopaque,
+    // deinit
+
+    pub fn invoke(self: @This()) void {
+        @call(.auto, self.callback, .{self.context});
+    }
+};
+
+pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: SystemDesc) !void {
     _ = desc;
+
+    const SystemType = @TypeOf(system);
+    const system_info = @typeInfo(SystemType);
+    if (system_info != .@"fn") @compileError("Only Functions supported in World.addSystem");
+
+    const TupleType = std.meta.ArgsTuple(SystemType);
+
+    const Context = struct {
+        callback: *const SystemType,
+        params: TupleType,
+
+        fn deinit(self_ctx: *@This(), gpa_ctx: Allocator) void {
+            gpa_ctx.destroy(self_ctx);
+        }
+
+        fn invoke(self_ctx: *const @This()) void {
+            @call(.auto, self_ctx.callback, self_ctx.params);
+        }
+    };
+    const ctx: *Context = try gpa.create(Context);
+    const tuple = &ctx.params;
+    ctx.callback = system;
+
+    const params = system_info.@"fn".params;
+    inline for (params, 0..) |param, i| {
+        const field_name = comptime std.fmt.comptimePrint("{}", .{i});
+        if (param.type) |ptype|
+            @field(tuple.*, field_name) = try ptype.init(self);
+    }
+
+    const system_yeet = System{
+        .callback = @ptrCast(&Context.invoke),
+        .context = ctx,
+    };
+    system_yeet.invoke();
+
+    // _ = try self.set(system_entity, System, .{});
 }
