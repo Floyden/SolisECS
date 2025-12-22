@@ -6,6 +6,8 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Entity = ecs.Entity;
 const ComponentDesc = ecs.ComponentDesc;
+const Query = ecs.Query;
+const QueryIter = ecs.QueryIter;
 
 const World = @This();
 
@@ -148,13 +150,23 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: SystemDesc
         }
     }
 
-    var system_component = System{
+    const system_component = System{
         .callback = @ptrCast(&Context.invoke),
         .deinit_cb = @ptrCast(&Context.deinit),
         .context = ctx,
     };
-    system_component.invoke();
-    system_component.deinit(gpa);
 
-    // _ = try self.set(system_entity, System, .{});
+    const system_entity = try self.create(gpa);
+    _ = try self.set(system_entity, System, system_component);
+}
+
+pub fn step(self: *World) !void {
+    var query = try Query(.{System}, .{}).init(self.allocator, self);
+    defer query.deinit(self.allocator);
+
+    var iter = QueryIter(@TypeOf(query)).create(&query);
+    while (iter.next()) |bind| {
+        for (bind.@"0") |system|
+            system.invoke();
+    }
 }
