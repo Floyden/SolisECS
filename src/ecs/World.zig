@@ -90,10 +90,14 @@ pub const SystemDesc = struct {
 
 pub const System = struct {
     callback: *const fn (*anyopaque) void,
+    deinit_cb: *const fn (*anyopaque, gpa: Allocator) void,
     context: *anyopaque,
-    // deinit
 
-    pub fn invoke(self: @This()) void {
+    pub fn deinit(self: *System, gpa: Allocator) void {
+        @call(.auto, self.deinit_cb, .{ self.context, gpa });
+    }
+
+    pub fn invoke(self: System) void {
         @call(.auto, self.callback, .{self.context});
     }
 };
@@ -112,6 +116,13 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: SystemDesc
         params: TupleType,
 
         fn deinit(self_ctx: *@This(), gpa_ctx: Allocator) void {
+            inline for (&self_ctx.params) |*param| {
+                const T = @TypeOf(param.*);
+                if (T == *World or T == *const World) continue;
+                if (@hasDecl(T, "deinit")) {
+                    param.deinit(gpa_ctx);
+                }
+            }
             gpa_ctx.destroy(self_ctx);
         }
 
@@ -126,15 +137,24 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: SystemDesc
     const params = system_info.@"fn".params;
     inline for (params, 0..) |param, i| {
         const field_name = comptime std.fmt.comptimePrint("{}", .{i});
-        if (param.type) |ptype|
-            @field(tuple.*, field_name) = try ptype.init(self);
+        switch (param.type.?) {
+            World => @compileError("World as parameter not supported, use *World or *const World"),
+            *World, *const World => {
+                @field(tuple.*, field_name) = self;
+            },
+            else => |t| {
+                @field(tuple.*, field_name) = try t.init(gpa, self);
+            },
+        }
     }
 
-    const system_yeet = System{
+    var system_component = System{
         .callback = @ptrCast(&Context.invoke),
+        .deinit_cb = @ptrCast(&Context.deinit),
         .context = ctx,
     };
-    system_yeet.invoke();
+    system_component.invoke();
+    system_component.deinit(gpa);
 
     // _ = try self.set(system_entity, System, .{});
 }
