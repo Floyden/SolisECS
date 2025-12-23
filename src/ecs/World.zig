@@ -36,7 +36,7 @@ pub fn init(allocator: Allocator) !World {
 pub fn deinit(self: *World) void {
     self.components.deinit(self.allocator);
     self.pairStorage.deinit(self.allocator);
-    self.storage.deinit();
+    self.storage.deinit(self.allocator);
 }
 
 // [TODO] implement
@@ -46,7 +46,7 @@ pub fn register(self: *World, allocator: std.mem.Allocator, comptime T: type) !v
 
 pub fn setSingleton(self: *World, comptime T: type, arg: T) !*T {
     try self.components.put(self.allocator, ComponentDesc.get(T), {});
-    return try self.storage.setSingleton(T, arg);
+    return try self.storage.setSingleton(self.allocator, T, arg);
 }
 
 pub fn getSingleton(self: *World, comptime T: type) ?*T {
@@ -71,7 +71,7 @@ pub fn create(self: *World, allocator: std.mem.Allocator) !Entity {
 }
 
 pub fn set(self: *World, entity: Entity, comptime T: type, arg: T) !void {
-    try self.storage.setComponents(entity, T, arg);
+    try self.storage.setComponents(self.allocator, entity, T, arg);
 }
 
 pub fn get(self: *World, entity: Entity, comptime T: type) ?*const T {
