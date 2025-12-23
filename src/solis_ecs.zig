@@ -7,3 +7,6 @@ pub const terms = @import("ecs/terms.zig");
 
 pub const typeId = @import("ecs/type_id.zig").typeId;
 pub const TypeId = @import("ecs/type_id.zig").TypeId;
+
+pub const Query = @import("ecs/query.zig").Query;
+pub const QueryIter = @import("ecs/query.zig").Iter;
