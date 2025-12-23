@@ -9,7 +9,6 @@ const Allocator = std.mem.Allocator;
 
 const Storage = @This();
 
-allocator: Allocator,
 // TODO: Figure out how to store stable pointers
 archetypes: std.ArrayList(*Archetype),
 singletons: *Archetype,
@@ -27,18 +26,17 @@ pub fn init(allocator: Allocator) !Storage {
     try archetypes.append(allocator, singletons_ptr); // Create Archetype for singletons
 
     return Storage{
-        .allocator = allocator,
         .archetypes = archetypes,
         .singletons = singletons_ptr,
     };
 }
 
-pub fn deinit(self: *Storage) void {
+pub fn deinit(self: *Storage, gpa: Allocator) void {
     for (self.archetypes.items) |list| {
-        list.deinit(self.allocator);
-        self.allocator.destroy(list);
+        list.deinit(gpa);
+        gpa.destroy(list);
     }
-    self.archetypes.deinit(self.allocator);
+    self.archetypes.deinit(gpa);
 }
 
 pub fn addEntity(self: *Storage, allocator: std.mem.Allocator, entity: Entity) !Entity {
@@ -65,10 +63,10 @@ fn findArchetype(self: *const Storage, entity: Entity) ?struct { index: usize, a
     return null;
 }
 
-pub fn setSingleton(self: *Storage, comptime T: type, arg: T) !*T {
+pub fn setSingleton(self: *Storage, gpa: Allocator, comptime T: type, arg: T) !*T {
     var idx_opt = self.singletons.getTypeLocation(T);
     if (idx_opt == null) {
-        try self.singletons.expand(self.allocator, T);
+        try self.singletons.expand(gpa, T);
         idx_opt = self.singletons.getTypeLocation(T);
     }
 
@@ -117,7 +115,7 @@ pub fn getMut(self: *const Storage, comptime T: type, entity: Entity) ?*T {
     return null;
 }
 
-pub fn setComponents(self: *Storage, entity: Entity, comptime T: type, arg: T) !void {
+pub fn setComponents(self: *Storage, gpa: Allocator, entity: Entity, comptime T: type, arg: T) !void {
     // Find Archetype of the Entity
     const location = self.findArchetype(entity) orelse return error.EntityNotFound;
     const entityIdx = location.index;
@@ -141,32 +139,32 @@ pub fn setComponents(self: *Storage, entity: Entity, comptime T: type, arg: T) !
 
     // Create new Archetype if the destination is not found
     if (destination == null) {
-        var types = try self.allocator.alloc(ComponentDesc, source.components.items.len + 1);
-        defer self.allocator.free(types);
+        var types = try gpa.alloc(ComponentDesc, source.components.items.len + 1);
+        defer gpa.free(types);
         for (source.components.items, 0..) |list, i| {
             types.ptr[i] = list.desc;
         }
         types[source.components.items.len] = ComponentDesc.get(T);
 
-        const new_archetype = try self.allocator.create(Archetype);
-        new_archetype.* = try Archetype.init(self.allocator, types);
-        try self.archetypes.append(self.allocator, new_archetype);
+        const new_archetype = try gpa.create(Archetype);
+        new_archetype.* = try Archetype.init(gpa, types);
+        try self.archetypes.append(gpa, new_archetype);
         var dest = self.archetypes.items[self.archetypes.items.len - 1];
-        try dest.removeTypeEdges.append(self.allocator, Archetype.Edge{ .from = dest, .to = source, .id = type_id.typeId(T) });
-        try source.addTypeEdges.append(self.allocator, Archetype.Edge{ .from = source, .to = dest, .id = type_id.typeId(T) });
+        try dest.removeTypeEdges.append(gpa, Archetype.Edge{ .from = dest, .to = source, .id = type_id.typeId(T) });
+        try source.addTypeEdges.append(gpa, Archetype.Edge{ .from = source, .to = dest, .id = type_id.typeId(T) });
         destination = dest;
     }
 
     // Move entity
-    try destination.?.entities.append(self.allocator, entity);
+    try destination.?.entities.append(gpa, entity);
 
     for (destination.?.components.items) |*component| {
         const index = source.getTypeIdLocation(component.desc.id);
         if (index == null) {
-            try component.append(self.allocator, T, arg);
+            try component.append(gpa, T, arg);
             continue;
         }
-        try component.appendRaw(self.allocator, source.components.items[index.?].getSingleRaw(entityIdx));
+        try component.appendRaw(gpa, source.components.items[index.?].getSingleRaw(entityIdx));
     }
     source.removeEntity(entity);
 }
