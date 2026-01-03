@@ -1,11 +1,11 @@
 const std = @import("std");
-const type_id = @import("type_id.zig");
-const Entity = @import("Entity.zig");
+const ecs = @import("solis_ecs");
+const Entity = ecs.Entity;
 
 pub const Pair = struct {
     src: Entity,
     dst: Entity,
-    relation: type_id.TypeId,
+    relation: ecs.TypeId,
 };
 
 pub const Storage = struct {

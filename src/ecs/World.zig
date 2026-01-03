@@ -1,21 +1,18 @@
 const std = @import("std");
-const ecs = @import("ecs.zig");
-const single = @import("single.zig");
-const type_id = @import("type_id.zig");
+const ecs = @import("solis_ecs");
 
+const typeId = ecs.typeId;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
-const Entity = @import("Entity.zig");
-const ComponentDesc = @import("components.zig").Description;
-const Storage = @import("Storage.zig");
-const pairs = @import("pairs.zig");
+const Entity = ecs.Entity;
+const ComponentDesc = ecs.ComponentDesc;
 
 const World = @This();
 
 allocator: Allocator,
 components: std.AutoHashMapUnmanaged(ComponentDesc, void),
-storage: Storage,
-pairStorage: pairs.Storage,
+storage: ecs.Storage,
+pairStorage: ecs.PairStorage,
 
 nextEntity: Entity,
 
@@ -40,7 +37,7 @@ pub fn deinit(self: *World) void {
 }
 
 // [TODO] implement
-pub fn register(self: *World, allocator: std.mem.Allocator, comptime T: type) !void {
+pub fn register(self: *World, allocator: Allocator, comptime T: type) !void {
     try self.components.put(allocator, ComponentDesc.get(T), {});
 }
 
@@ -54,18 +51,18 @@ pub fn getSingleton(self: *World, comptime T: type) ?*T {
 }
 
 pub fn addPair(self: *World, a: Entity, comptime R: type, b: Entity) !void {
-    try self.pairStorage.add(self.allocator, .{ .src = a, .dst = b, .relation = type_id.typeId(R) });
+    try self.pairStorage.add(self.allocator, .{ .src = a, .dst = b, .relation = typeId(R) });
 }
 
 pub fn removePair(self: *World, a: Entity, comptime R: type, b: Entity) void {
-    self.pairStorage.remove(.{ .src = a, .dst = b, .relation = type_id.typeId(R) });
+    self.pairStorage.remove(.{ .src = a, .dst = b, .relation = typeId(R) });
 }
 
 pub fn hasPair(self: *World, a: Entity, comptime R: type, b: Entity) bool {
-    return self.pairStorage.contains(.{ .src = a, .dst = b, .relation = type_id.typeId(R) });
+    return self.pairStorage.contains(.{ .src = a, .dst = b, .relation = typeId(R) });
 }
 
-pub fn create(self: *World, allocator: std.mem.Allocator) !Entity {
+pub fn create(self: *World, allocator: Allocator) !Entity {
     defer self.nextEntity.id += 1;
     return self.storage.addEntity(allocator, self.nextEntity);
 }

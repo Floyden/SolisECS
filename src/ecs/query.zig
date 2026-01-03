@@ -1,7 +1,6 @@
 const std = @import("std");
-const Archetype = @import("Archetype.zig");
-const World = @import("World.zig");
-const Entity = @import("Entity.zig");
+const ecs = @import("solis_ecs");
+const World = ecs.World;
 
 fn parseTupleTypes(comptime tuple: anytype) [@typeInfo(@TypeOf(tuple)).@"struct".fields.len]type {
     const TupleType = @TypeOf(tuple);
@@ -42,7 +41,7 @@ pub fn Iter(comptime Q: anytype) type {
         pub const ComponentBinding = ComponentBindings(&ComponentArray);
 
         query: *const Q,
-        entity: Entity,
+        entity: ecs.Entity,
         archetype: usize,
         binding: ComponentBinding,
 
@@ -94,7 +93,7 @@ pub fn Query(components: anytype, filters: anytype) type {
         pub const ComponentArray = parseTupleTypes(components);
         pub const FilterArray = parseTupleTypes(filters);
 
-        archetypes: std.ArrayList(*Archetype),
+        archetypes: std.ArrayList(*ecs.Archetype),
 
         pub fn init(gpa: std.mem.Allocator, world: *World) !Self {
             var res: Self = .{ .archetypes = .empty };
