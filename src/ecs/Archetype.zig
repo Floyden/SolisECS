@@ -1,18 +1,17 @@
 const std = @import("std");
-const _component = @import("components.zig");
-const type_id = @import("type_id.zig");
-const Entity = @import("Entity.zig");
+const ecs = @import("solis_ecs");
 
 const ArrayList = std.ArrayList;
-const ComponentDesc = _component.Description;
-const ComponentList = _component.List;
+const ComponentDesc = ecs.ComponentDesc;
+const ComponentList = ecs.ComponentList;
+const Entity = ecs.Entity;
 
 const Archetype = @This();
 
 pub const Edge = struct {
     from: *Archetype,
     to: *Archetype,
-    id: type_id.TypeId,
+    id: ecs.TypeId,
 };
 
 pub const empty = Archetype{
@@ -23,7 +22,7 @@ pub const empty = Archetype{
 };
 
 entities: ArrayList(Entity),
-components: ArrayList(ComponentList),
+components: ArrayList(ecs.ComponentList),
 addTypeEdges: ArrayList(Edge),
 removeTypeEdges: ArrayList(Edge),
 
@@ -85,7 +84,7 @@ pub fn removeEntity(self: *Archetype, entity: Entity) void {
     _ = self.entities.swapRemove(index.?);
 }
 
-pub fn getTypeIdLocation(self: *const Archetype, id: type_id.TypeId) ?usize {
+pub fn getTypeIdLocation(self: *const Archetype, id: ecs.TypeId) ?usize {
     for (self.components.items, 0..) |c, i| {
         if (c.desc.id == id) {
             return i;
@@ -95,14 +94,14 @@ pub fn getTypeIdLocation(self: *const Archetype, id: type_id.TypeId) ?usize {
 }
 
 pub fn getTypeLocation(self: *const Archetype, comptime T: type) ?usize {
-    return self.getTypeIdLocation(type_id.typeId(T));
+    return self.getTypeIdLocation(ecs.typeId(T));
 }
 
 pub fn hasType(self: *const Archetype, comptime T: type) bool {
-    return self.hasTypeId(type_id.typeId(T));
+    return self.hasTypeId(ecs.typeId(T));
 }
 
-pub fn hasTypeId(self: *const Archetype, id: type_id.TypeId) bool {
+pub fn hasTypeId(self: *const Archetype, id: ecs.TypeId) bool {
     return self.getTypeIdLocation(id) != null;
 }
 

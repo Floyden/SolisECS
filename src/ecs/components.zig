@@ -1,5 +1,5 @@
 const std = @import("std");
-const type_id = @import("type_id.zig");
+const ecs = @import("solis_ecs");
 const ArrayList = std.ArrayList;
 
 pub const List = struct {
@@ -22,7 +22,7 @@ pub const List = struct {
     }
 
     pub fn allocate(self: *List, allocator: std.mem.Allocator, comptime T: type, n: usize) !void {
-        std.debug.assert(self.desc.id == type_id.typeId(T));
+        std.debug.assert(self.desc.id == ecs.typeId(T));
 
         if (comptime @sizeOf(T) == 0) {
             self.data.items.len += n;
@@ -32,7 +32,7 @@ pub const List = struct {
     }
 
     pub fn append(self: *List, allocator: std.mem.Allocator, comptime T: type, component: T) !void {
-        std.debug.assert(self.desc.id == type_id.typeId(T));
+        std.debug.assert(self.desc.id == ecs.typeId(T));
         if (comptime @sizeOf(T) == 0) {
             self.data.items.len += 1;
             return;
@@ -66,12 +66,12 @@ pub const List = struct {
     }
 
     pub fn get(self: *const List, comptime T: type) []const T {
-        std.debug.assert(self.desc.id == type_id.typeId(T));
+        std.debug.assert(self.desc.id == ecs.typeId(T));
         return @as([*]const T, @ptrCast(@alignCast(self.data.items.ptr)))[0..self.count()];
     }
 
     pub fn getMut(self: *const List, comptime T: type) []T {
-        std.debug.assert(self.desc.id == type_id.typeId(T));
+        std.debug.assert(self.desc.id == ecs.typeId(T));
         return @as([*]T, @ptrCast(@alignCast(self.data.items.ptr)))[0..self.count()];
     }
 
@@ -91,7 +91,7 @@ pub const List = struct {
 pub const Description = struct {
     size: usize,
     alignment: u16,
-    id: type_id.TypeId,
+    id: ecs.TypeId,
     deinit: ?*const anyopaque,
 
     pub fn get(comptime T: type) Description {
@@ -104,7 +104,7 @@ pub const Description = struct {
         return .{
             .size = @sizeOf(T),
             .alignment = @alignOf(T),
-            .id = type_id.typeId(T),
+            .id = ecs.typeId(T),
             .deinit = deinit_ptr,
         };
     }

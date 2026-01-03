@@ -1,10 +1,8 @@
 const std = @import("std");
-const Entity = @import("Entity.zig");
-const _component = @import("components.zig");
-const type_id = @import("type_id.zig");
-pub const Archetype = @import("Archetype.zig");
-const ComponentDesc = _component.Description;
-const ComponentList = _component.List;
+const ecs = @import("solis_ecs");
+
+const Archetype = ecs.Archetype;
+const Entity = ecs.Entity;
 const Allocator = std.mem.Allocator;
 
 const Storage = @This();
@@ -90,7 +88,7 @@ pub fn get(self: *const Storage, comptime T: type, entity: Entity) ?*const T {
     const index = location.index;
 
     for (source.components.items) |*list| {
-        if (list.desc.id == type_id.typeId(T)) {
+        if (list.desc.id == ecs.typeId(T)) {
             if (@sizeOf(T) == 0)
                 return @ptrCast(list.get(T));
             return &list.get(T)[index];
@@ -105,7 +103,7 @@ pub fn getMut(self: *const Storage, comptime T: type, entity: Entity) ?*T {
     const index = location.index;
 
     for (source.components.items) |*list| {
-        if (list.desc.id == type_id.typeId(T)) {
+        if (list.desc.id == ecs.typeId(T)) {
             if (@sizeOf(T) == 0)
                 return @ptrCast(list.getMut(T));
 
@@ -131,7 +129,7 @@ pub fn setComponents(self: *Storage, gpa: Allocator, entity: Entity, comptime T:
     // Find new destination
     var destination: ?*Archetype = null;
     for (source.addTypeEdges.items) |edge| {
-        if (edge.id == type_id.typeId(T)) {
+        if (edge.id == ecs.typeId(T)) {
             destination = edge.to;
             break;
         }
@@ -139,19 +137,19 @@ pub fn setComponents(self: *Storage, gpa: Allocator, entity: Entity, comptime T:
 
     // Create new Archetype if the destination is not found
     if (destination == null) {
-        var types = try gpa.alloc(ComponentDesc, source.components.items.len + 1);
+        var types = try gpa.alloc(ecs.ComponentDesc, source.components.items.len + 1);
         defer gpa.free(types);
         for (source.components.items, 0..) |list, i| {
             types.ptr[i] = list.desc;
         }
-        types[source.components.items.len] = ComponentDesc.get(T);
+        types[source.components.items.len] = ecs.ComponentDesc.get(T);
 
         const new_archetype = try gpa.create(Archetype);
         new_archetype.* = try Archetype.init(gpa, types);
         try self.archetypes.append(gpa, new_archetype);
         var dest = self.archetypes.items[self.archetypes.items.len - 1];
-        try dest.removeTypeEdges.append(gpa, Archetype.Edge{ .from = dest, .to = source, .id = type_id.typeId(T) });
-        try source.addTypeEdges.append(gpa, Archetype.Edge{ .from = source, .to = dest, .id = type_id.typeId(T) });
+        try dest.removeTypeEdges.append(gpa, Archetype.Edge{ .from = dest, .to = source, .id = ecs.typeId(T) });
+        try source.addTypeEdges.append(gpa, Archetype.Edge{ .from = source, .to = dest, .id = ecs.typeId(T) });
         destination = dest;
     }
 
