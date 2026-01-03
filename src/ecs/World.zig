@@ -16,6 +16,7 @@ components: std.AutoHashMapUnmanaged(ComponentDesc, void),
 storage: ecs.Storage,
 pairStorage: ecs.PairStorage,
 
+schedule: Entity,
 nextEntity: Entity,
 
 pub fn init(allocator: Allocator) !World {
@@ -23,11 +24,11 @@ pub fn init(allocator: Allocator) !World {
         .allocator = allocator,
         .components = .empty,
         .nextEntity = .{ .id = 1 },
-        .storage = undefined,
+        .schedule = undefined,
+        .storage = try .init(allocator),
         .pairStorage = .empty,
     };
-
-    world.storage = try .init(allocator);
+    try ecs.Schedule.init(allocator, &world);
 
     return world;
 }
@@ -73,6 +74,11 @@ pub fn create(self: *World, allocator: Allocator) !Entity {
     return self.storage.addEntity(allocator, self.nextEntity);
 }
 
+/// Insert an existing entity into the world. Used for internal entities.
+pub fn insertEntity(self: *World, gpa: Allocator, entity: Entity) !void {
+    _ = try self.storage.addEntity(gpa, entity);
+}
+
 pub fn set(self: *World, entity: Entity, comptime T: type, arg: T) !void {
     try self.storage.setComponents(self.allocator, entity, T, arg);
 }
@@ -86,7 +92,7 @@ pub fn getMut(self: *World, entity: Entity, comptime T: type) ?*T {
 }
 
 pub const SystemDesc = struct {
-    // Stage
+    stage: Entity = .stage_update,
     // dependencies
 };
 
