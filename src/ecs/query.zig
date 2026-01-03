@@ -118,5 +118,9 @@ pub fn Query(components: anytype, filters: anytype) type {
         pub fn deinit(self: *Self, gpa: std.mem.Allocator) void {
             self.archetypes.deinit(gpa);
         }
+
+        pub fn iter(self: *Self) Iter(Self) {
+            return Iter(Self).create(self);
+        }
     };
 }
