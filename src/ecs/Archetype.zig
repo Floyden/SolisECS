@@ -75,13 +75,12 @@ pub fn findEntity(self: *const Archetype, entity: Entity) ?usize {
 }
 
 pub fn removeEntity(self: *Archetype, entity: Entity) void {
-    const index = self.findEntity(entity);
-    if (index == null) return;
+    const index = self.findEntity(entity) orelse return;
 
     for (self.components.items) |*component| {
-        component.swapRemove(index.?);
+        component.swapRemove(index);
     }
-    _ = self.entities.swapRemove(index.?);
+    _ = self.entities.swapRemove(index);
 }
 
 pub fn getTypeIdLocation(self: *const Archetype, id: ecs.TypeId) ?usize {

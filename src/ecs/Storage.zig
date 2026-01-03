@@ -83,7 +83,7 @@ pub fn getSingleton(self: *const Storage, comptime T: type) ?*T {
 }
 
 pub fn get(self: *const Storage, comptime T: type, entity: Entity) ?*const T {
-    const location = self.findArchetype(entity).?;
+    const location = self.findArchetype(entity) orelse return null;
     const source = location.archetype;
     const index = location.index;
 
@@ -98,7 +98,7 @@ pub fn get(self: *const Storage, comptime T: type, entity: Entity) ?*const T {
 }
 
 pub fn getMut(self: *const Storage, comptime T: type, entity: Entity) ?*T {
-    const location = self.findArchetype(entity).?;
+    const location = self.findArchetype(entity) orelse return null;
     const source = location.archetype;
     const index = location.index;
 
