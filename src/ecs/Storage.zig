@@ -210,11 +210,138 @@ pub fn setComponents(self: *Storage, gpa: Allocator, entity: Entity, comptime T:
 
     for (destination.?.components.items) |*component| {
         const index = source.getTypeIdLocation(component.desc.id);
-        if (index == null) {
+        if (index) |i| {
+            try component.appendRaw(gpa, source.components.items[i].getSingleRaw(entityIdx));
+        } else {
             try component.append(gpa, T, arg);
-            continue;
         }
-        try component.appendRaw(gpa, source.components.items[index.?].getSingleRaw(entityIdx));
     }
     source.removeEntity(entity);
+}
+
+const Position = struct { x: f32, y: f32 };
+const Velocity = struct { x: f32, y: f32 };
+const Gravity = struct { g: f32 };
+
+test "Add Components" {
+    const gpa = std.testing.allocator;
+    var storage = try Storage.init(gpa);
+    defer storage.deinit(gpa);
+
+    const e = try storage.addEntity(gpa, Entity{ .id = 42 });
+
+    try storage.setComponents(gpa, e, Position, .{ .x = 1, .y = 2 });
+    try storage.setComponents(gpa, e, Velocity, .{ .x = 3, .y = 4 });
+
+    const pos = storage.get(Position, e) orelse return error.NullValue;
+    try std.testing.expectEqual(@as(f32, 1), pos.x);
+    try std.testing.expectEqual(@as(f32, 2), pos.y);
+
+    const vel = storage.get(Velocity, e) orelse return error.NullValue;
+    try std.testing.expectEqual(@as(f32, 3), vel.x);
+    try std.testing.expectEqual(@as(f32, 4), vel.y);
+}
+
+test "Modify Components" {
+    const gpa = std.testing.allocator;
+    var storage = try Storage.init(gpa);
+    defer storage.deinit(gpa);
+
+    const e = try storage.addEntity(gpa, Entity{ .id = 42 });
+    try storage.setComponents(gpa, e, Position, .{ .x = 0, .y = 0 });
+
+    const pos = storage.getMut(Position, e) orelse return error.NullValue;
+    pos.x = 10;
+    pos.y = 20;
+
+    const pos2 = storage.getMut(Position, e) orelse return error.NullValue;
+    try std.testing.expectEqual(@as(f32, 10), pos2.x);
+    try std.testing.expectEqual(@as(f32, 20), pos2.y);
+}
+
+test "Remove Component directly" {
+    const gpa = std.testing.allocator;
+    var storage = try Storage.init(gpa);
+    defer storage.deinit(gpa);
+
+    const e = try storage.addEntity(gpa, Entity{ .id = 42 });
+    try storage.setComponents(gpa, e, Position, .{ .x = 0, .y = 0 });
+
+    try std.testing.expect(storage.get(Position, e) != null);
+
+    try storage.removeComponent(gpa, e, Position);
+
+    try std.testing.expect(storage.findArchetype(e) != null);
+    try std.testing.expect(storage.get(Position, e) == null);
+}
+
+// TODO: Not yet implemented
+// test "Remove Entity Mark/Sweep" {
+//     const gpa = std.testing.allocator;
+//     var storage = try Storage.init(gpa);
+//     defer storage.deinit(gpa);
+//
+//     const e = try storage.addEntity(gpa, Entity{ .id = 42 });
+//     try storage.setComponents(gpa, e, Position, .{ .x = 0, .y = 0 });
+//
+//     try std.testing.expect(storage.get(Position, e) != null);
+//
+//     storage.markEntity(e);
+//     storage.removeMarked();
+//
+//     try std.testing.expect(storage.get(Position, e) == null);
+// }
+
+test "Remove Entity Directly" {
+    const gpa = std.testing.allocator;
+    var storage = try Storage.init(gpa);
+    defer storage.deinit(gpa);
+
+    const e = try storage.addEntity(gpa, Entity{ .id = 42 });
+    try storage.setComponents(gpa, e, Position, .{ .x = 0, .y = 0 });
+
+    storage.removeEntity(e);
+
+    try std.testing.expect(storage.get(Position, e) == null);
+}
+
+test "Basic Singleton" {
+    const gpa = std.testing.allocator;
+    var storage = try Storage.init(gpa);
+    defer storage.deinit(gpa);
+
+    const s = try storage.setSingleton(gpa, Gravity, .{ .g = 9.81 });
+
+    try std.testing.expectEqual(9.81, s.g);
+
+    const s2 = storage.getSingleton(Gravity) orelse return error.TestExpectedEqual;
+    try std.testing.expect(s == s2);
+}
+
+test "Mutate Singleton" {
+    const gpa = std.testing.allocator;
+    var storage = try Storage.init(gpa);
+    defer storage.deinit(gpa);
+
+    _ = try storage.setSingleton(gpa, Gravity, .{ .g = 9.81 });
+    _ = try storage.setSingleton(gpa, Gravity, .{ .g = 98.1 });
+
+    const s = storage.getSingleton(Gravity) orelse return error.TestExpectedEqual;
+    try std.testing.expectEqual(98.1, s.g);
+}
+
+test "Multiple Entities" {
+    const gpa = std.testing.allocator;
+    var storage = try Storage.init(gpa);
+    defer storage.deinit(gpa);
+
+    const e1 = try storage.addEntity(gpa, Entity{ .id = 42 });
+    const e2 = try storage.addEntity(gpa, Entity{ .id = 43 });
+
+    try storage.setComponents(gpa, e1, Position, .{ .x = 1, .y = 1 });
+    try storage.setComponents(gpa, e2, Position, .{ .x = 2, .y = 2 });
+    try storage.setComponents(gpa, e2, Velocity, .{ .x = 3, .y = 3 });
+    try std.testing.expectEqual(@as(f32, 1), storage.get(Position, e1).?.x);
+    try std.testing.expectEqual(@as(f32, 2), storage.get(Position, e2).?.x);
+    try std.testing.expectEqual(@as(f32, 3), storage.get(Velocity, e2).?.x);
 }
