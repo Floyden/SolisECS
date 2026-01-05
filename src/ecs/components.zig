@@ -76,7 +76,10 @@ pub const List = struct {
     }
 
     pub fn getSingleRaw(self: *const List, index: usize) []const u8 {
-        return @as([*]u8, @ptrCast(@alignCast(self.data.items.ptr)))[index .. index + self.desc.size];
+        const start = index * self.desc.size;
+        const end = start + self.desc.size;
+        std.debug.assert(end <= self.data.items.len);
+        return @as([*]u8, @ptrCast(@alignCast(self.data.items.ptr)))[start..end];
     }
 
     pub fn count(self: *const List) usize {
