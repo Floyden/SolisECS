@@ -52,6 +52,15 @@ pub fn removeMarked(self: *Storage) void {
     _ = self;
 }
 
+pub fn removeEntity(self: *Storage, entity: Entity) void {
+    for (self.archetypes.items) |i| {
+        if (i.findEntity(entity)) |_| {
+            i.removeEntity(entity);
+            return;
+        }
+    }
+}
+
 fn findArchetype(self: *const Storage, entity: Entity) ?struct { index: usize, archetype: *Archetype } {
     for (0..self.archetypes.items.len) |i| {
         if (self.archetypes.items[i].findEntity(entity)) |value| {
@@ -111,6 +120,49 @@ pub fn getMut(self: *const Storage, comptime T: type, entity: Entity) ?*T {
         }
     }
     return null;
+}
+
+pub fn removeComponent(self: *Storage, gpa: Allocator, entity: Entity, comptime T: type) !void {
+    // Find Archetype of the Entity
+    const location = self.findArchetype(entity) orelse return error.EntityNotFound;
+    const entityIdx = location.index;
+    var source = location.archetype;
+
+    // Find new destination
+    var destination: ?*Archetype = null;
+    for (source.removeTypeEdges.items) |edge| {
+        if (edge.id == ecs.typeId(T)) {
+            destination = edge.to;
+            break;
+        }
+    }
+
+    // Create new Archetype if the destination is not found
+    if (destination == null) {
+        var types = try gpa.alloc(ecs.ComponentDesc, source.components.items.len - 1);
+        defer gpa.free(types);
+        for (source.components.items, 0..) |list, i| {
+            if (list.desc.id == ecs.typeId(T)) continue;
+            types.ptr[i] = list.desc;
+        }
+
+        const new_archetype = try gpa.create(Archetype);
+        new_archetype.* = try Archetype.init(gpa, types);
+        try self.archetypes.append(gpa, new_archetype);
+        var dest = self.archetypes.items[self.archetypes.items.len - 1];
+        try dest.addTypeEdges.append(gpa, Archetype.Edge{ .from = dest, .to = source, .id = ecs.typeId(T) });
+        try source.removeTypeEdges.append(gpa, Archetype.Edge{ .from = source, .to = dest, .id = ecs.typeId(T) });
+        destination = dest;
+    }
+
+    // Move entity
+    try destination.?.entities.append(gpa, entity);
+
+    for (destination.?.components.items) |*component| {
+        const index = source.getTypeIdLocation(component.desc.id);
+        try component.appendRaw(gpa, source.components.items[index.?].getSingleRaw(entityIdx));
+    }
+    source.removeEntity(entity);
 }
 
 pub fn setComponents(self: *Storage, gpa: Allocator, entity: Entity, comptime T: type, arg: T) !void {
