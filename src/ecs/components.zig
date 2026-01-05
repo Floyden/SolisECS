@@ -97,7 +97,7 @@ pub const Description = struct {
     pub fn get(comptime T: type) Description {
         comptime var deinit_ptr: ?*const anyopaque = null;
 
-        if (@hasDecl(T, "deinit")) {
+        if (@typeInfo(T) == .@"struct" and @hasDecl(T, "deinit")) {
             deinit_ptr = @ptrCast(&@field(T, "deinit"));
         }
 
