@@ -47,9 +47,10 @@ pub const Storage = struct {
     pub fn contains(self: *const Storage, pair: Pair) bool {
         const list = self.relations.get(pair.relation) orelse return false;
         for (list.items) |item| {
-            if (item.src.id == pair.src.id and item.dst.id == pair.dst.id) {
+            const src_match = pair.src.id == Entity.any.id or item.src.id == pair.src.id;
+            const dst_match = pair.dst.id == Entity.any.id or item.dst.id == pair.dst.id;
+            if (src_match and dst_match)
                 return true;
-            }
         }
         return false;
     }
