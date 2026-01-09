@@ -14,12 +14,31 @@ const PairUntyped = struct {
 };
 
 pub const Storage = struct {
+    // TODO: use multiple maps for fast access of pairs
+    relations: std.AutoArrayHashMapUnmanaged(ecs.TypeId, std.ArrayList(PairUntyped)),
+
     pub const empty: Storage = .{
         .relations = .empty,
     };
 
-    // TODO: use multiple maps for fast access of pairs
-    relations: std.AutoArrayHashMapUnmanaged(ecs.TypeId, std.ArrayList(PairUntyped)),
+    pub const Iterator = struct {
+        pairs: *const std.ArrayList(PairUntyped),
+        index: usize,
+        query: Pair,
+
+        pub fn next(it: *Iterator) ?PairUntyped {
+            for (it.pairs.items[it.index..], it.index..) |pair, i| {
+                const src_match = it.query.src.id == Entity.any.id or it.query.src.id == pair.src.id;
+                const dst_match = it.query.dst.id == Entity.any.id or it.query.dst.id == pair.dst.id;
+                if (src_match and dst_match) {
+                    it.index = i + 1;
+                    return pair;
+                }
+            }
+            it.index = it.pairs.items.len;
+            return null;
+        }
+    };
 
     pub fn deinit(self: *Storage, gpa: std.mem.Allocator) void {
         const vals = self.relations.values();
@@ -53,6 +72,19 @@ pub const Storage = struct {
                 return true;
         }
         return false;
+    }
+
+    pub fn query(self: *const Storage, pair: Pair) Iterator {
+        const list = self.relations.getPtr(pair.relation) orelse return Iterator{
+            .pairs = &std.ArrayList(PairUntyped).empty,
+            .index = 0,
+            .query = pair,
+        };
+        return Iterator{
+            .pairs = list,
+            .index = 0,
+            .query = pair,
+        };
     }
 };
 
@@ -145,4 +177,38 @@ test "query respects relations" {
     };
 
     try std.testing.expect(!storage.contains(query));
+}
+
+test "Query test" {
+    const gpa = std.testing.allocator;
+    var storage = Storage.empty;
+    defer storage.deinit(gpa);
+
+    try storage.add(gpa, .{
+        .relation = ecs.typeId(TestRel),
+        .src = .{ .id = 1 },
+        .dst = .{ .id = 10 },
+    });
+    try storage.add(gpa, .{
+        .relation = ecs.typeId(TestRel),
+        .src = .{ .id = 2 },
+        .dst = .{ .id = 10 },
+    });
+    try storage.add(gpa, .{
+        .relation = ecs.typeId(TestRel),
+        .src = .{ .id = 3 },
+        .dst = .{ .id = 20 },
+    });
+
+    var it = storage.query(.{
+        .relation = ecs.typeId(TestRel),
+        .src = Entity.any,
+        .dst = .{ .id = 10 },
+    });
+
+    const first = it.next() orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 10), first.dst.id);
+    const second = it.next() orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 10), second.dst.id);
+    try std.testing.expect(it.next() == null);
 }
