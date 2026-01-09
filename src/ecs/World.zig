@@ -19,6 +19,8 @@ pairStorage: ecs.PairStorage,
 schedule: Entity,
 nextEntity: Entity,
 
+frame: usize,
+
 pub fn init(allocator: Allocator) !World {
     var world = World{
         .allocator = allocator,
@@ -27,6 +29,7 @@ pub fn init(allocator: Allocator) !World {
         .schedule = undefined,
         .storage = try .init(allocator),
         .pairStorage = .empty,
+        .frame = 0,
     };
     try ecs.Schedule.init(allocator, &world);
 
@@ -100,6 +103,7 @@ pub const System = struct {
     callback: *const fn (*anyopaque) void,
     deinit_cb: *const fn (*anyopaque, gpa: Allocator) void,
     context: *anyopaque,
+    last_frame: u64 = 0,
 
     pub fn deinit(self: *System, gpa: Allocator) void {
         @call(.auto, self.deinit_cb, .{ self.context, gpa });
@@ -167,12 +171,16 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: SystemDesc
 }
 
 pub fn step(self: *World) !void {
-    var query = try Query(.{System}, .{}).init(self.allocator, self);
+    self.frame += 1;
+
+    var query = try Query(.{*System}, .{}).init(self.allocator, self);
     defer query.deinit(self.allocator);
 
     var iter = QueryIter(@TypeOf(query)).create(&query);
     while (iter.next()) |bind| {
-        for (bind.@"0") |system|
+        for (bind.@"0") |*system| {
             system.invoke();
+            system.last_frame = self.frame;
+        }
     }
 }
