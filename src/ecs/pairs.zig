@@ -8,32 +8,46 @@ pub const Pair = struct {
     relation: ecs.TypeId,
 };
 
+const PairUntyped = struct {
+    src: Entity,
+    dst: Entity,
+};
+
 pub const Storage = struct {
-    pub const empty: Storage = .{ .pairs = .empty };
+    pub const empty: Storage = .{
+        .relations = .empty,
+    };
 
     // TODO: use multiple maps for fast access of pairs
-    pairs: std.ArrayList(Pair),
+    relations: std.AutoArrayHashMapUnmanaged(ecs.TypeId, std.ArrayList(PairUntyped)),
 
     pub fn deinit(self: *Storage, gpa: std.mem.Allocator) void {
-        self.pairs.deinit(gpa);
+        const vals = self.relations.values();
+        for (vals) |*value| {
+            value.deinit(gpa);
+        }
+        self.relations.deinit(gpa);
     }
 
     pub fn add(self: *Storage, gpa: std.mem.Allocator, pair: Pair) !void {
-        try self.pairs.append(gpa, pair);
+        const list = try self.relations.getOrPutValue(gpa, pair.relation, .empty);
+        try list.value_ptr.append(gpa, .{ .src = pair.src, .dst = pair.dst });
     }
 
     pub fn remove(self: *Storage, pair: Pair) void {
-        for (self.pairs.items, 0..) |item, i| {
-            if (std.meta.eql(item, pair)) {
-                _ = self.pairs.swapRemove(i);
+        const list = self.relations.getPtr(pair.relation) orelse return;
+        for (list.items, 0..) |item, i| {
+            if (item.src.id == pair.src.id and item.dst.id == pair.dst.id) {
+                _ = list.swapRemove(i);
                 return;
             }
         }
     }
 
     pub fn contains(self: *const Storage, pair: Pair) bool {
-        for (self.pairs.items) |item| {
-            if (std.meta.eql(item, pair)) {
+        const list = self.relations.get(pair.relation) orelse return false;
+        for (list.items) |item| {
+            if (item.src.id == pair.src.id and item.dst.id == pair.dst.id) {
                 return true;
             }
         }
