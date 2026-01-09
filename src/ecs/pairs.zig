@@ -55,3 +55,94 @@ pub const Storage = struct {
         return false;
     }
 };
+
+const TestRel = struct {};
+const TestRel2 = struct {};
+
+test "Add/Remove Pair" {
+    const gpa = std.testing.allocator;
+    var storage = Storage.empty;
+    defer storage.deinit(gpa);
+
+    const pair = Pair{
+        .relation = ecs.typeId(TestRel),
+        .src = .{ .id = 1 },
+        .dst = .{ .id = 2 },
+    };
+
+    const pair2 = Pair{
+        .relation = ecs.typeId(TestRel),
+        .src = .{ .id = 3 },
+        .dst = .{ .id = 4 },
+    };
+
+    try std.testing.expect(!storage.contains(pair));
+    try std.testing.expect(!storage.contains(pair2));
+    try storage.add(gpa, pair);
+    try storage.add(gpa, pair2);
+    try std.testing.expect(storage.contains(pair));
+    try std.testing.expect(storage.contains(pair2));
+    storage.remove(pair);
+    try std.testing.expect(!storage.contains(pair));
+    try std.testing.expect(storage.contains(pair2));
+}
+
+test "Any query" {
+    const gpa = std.testing.allocator;
+    var storage = Storage.empty;
+    defer storage.deinit(gpa);
+
+    try storage.add(gpa, .{
+        .relation = ecs.typeId(TestRel),
+        .src = .{ .id = 1 },
+        .dst = .{ .id = 2 },
+    });
+
+    try storage.add(gpa, .{
+        .relation = ecs.typeId(TestRel),
+        .src = .{ .id = 3 },
+        .dst = .{ .id = 4 },
+    });
+
+    const query1 = Pair{
+        .relation = ecs.typeId(TestRel),
+        .src = Entity.any,
+        .dst = .{ .id = 2 },
+    };
+
+    const query2 = Pair{
+        .relation = ecs.typeId(TestRel),
+        .src = .{ .id = 1 },
+        .dst = Entity.any,
+    };
+
+    const query3 = Pair{
+        .relation = ecs.typeId(TestRel),
+        .src = Entity.any,
+        .dst = Entity.any,
+    };
+
+    try std.testing.expect(storage.contains(query1));
+    try std.testing.expect(storage.contains(query2));
+    try std.testing.expect(storage.contains(query3));
+}
+
+test "query respects relations" {
+    const gpa = std.testing.allocator;
+    var storage = Storage.empty;
+    defer storage.deinit(gpa);
+
+    try storage.add(gpa, .{
+        .relation = ecs.typeId(TestRel),
+        .src = .{ .id = 1 },
+        .dst = .{ .id = 2 },
+    });
+
+    const query = Pair{
+        .relation = ecs.typeId(TestRel2),
+        .src = Entity.any,
+        .dst = Entity.any,
+    };
+
+    try std.testing.expect(!storage.contains(query));
+}
