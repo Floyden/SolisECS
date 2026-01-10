@@ -13,6 +13,13 @@ const PairUntyped = struct {
     dst: Entity,
 };
 
+const TraverseDesc = struct {
+    relation: ecs.TypeId,
+    node: Entity,
+    bfs: bool = true, // true: use bfs; false: use dfs
+    reversed: bool = false,
+};
+
 pub const Storage = struct {
     // TODO: use multiple maps for fast access of pairs
     relations: std.AutoArrayHashMapUnmanaged(ecs.TypeId, std.ArrayList(PairUntyped)),
@@ -37,6 +44,59 @@ pub const Storage = struct {
             }
             it.index = it.pairs.items.len;
             return null;
+        }
+    };
+
+    pub const TraverseIter = struct {
+        desc: TraverseDesc,
+        gpa: std.mem.Allocator,
+        storage: *const Storage,
+        queue: std.ArrayList(Entity),
+        found: std.AutoArrayHashMapUnmanaged(Entity, void),
+        next_idx: usize,
+
+        pub fn init(gpa: std.mem.Allocator, storage: *const Storage, desc: TraverseDesc) !TraverseIter {
+            var res = TraverseIter{
+                .desc = desc,
+                .gpa = gpa,
+                .storage = storage,
+                .queue = .empty,
+                .found = .empty,
+                .next_idx = 0,
+            };
+
+            try res.queue.append(gpa, desc.node);
+            try res.found.put(gpa, desc.node, {});
+            return res;
+        }
+
+        pub fn next(self: *TraverseIter) !?Entity {
+            if (self.next_idx >= self.queue.items.len) return null;
+            if (!self.desc.bfs) @panic("Not Implemented");
+            const query: Pair = if (!self.desc.reversed) .{
+                .src = self.queue.items[self.next_idx],
+                .relation = self.desc.relation,
+                .dst = .any,
+            } else .{
+                .src = .any,
+                .relation = self.desc.relation,
+                .dst = self.queue.items[self.next_idx],
+            };
+
+            var matches = self.storage.match(query);
+            while (matches.next()) |edge| {
+                const node = if (!self.desc.reversed) edge.dst else edge.src;
+                const res = try self.found.getOrPut(self.gpa, node);
+                if (!res.found_existing)
+                    try self.queue.append(self.gpa, node);
+            }
+            defer self.next_idx += 1;
+            return self.queue.items[self.next_idx];
+        }
+
+        pub fn deinit(self: *TraverseIter) void {
+            self.queue.deinit(self.gpa);
+            self.found.deinit(self.gpa);
         }
     };
 
@@ -74,17 +134,22 @@ pub const Storage = struct {
         return false;
     }
 
-    pub fn query(self: *const Storage, pair: Pair) Iterator {
-        const list = self.relations.getPtr(pair.relation) orelse return Iterator{
+    // Find all pairs which fit the filter pair.
+    pub fn match(self: *const Storage, filter: Pair) Iterator {
+        const list = self.relations.getPtr(filter.relation) orelse return Iterator{
             .pairs = &std.ArrayList(PairUntyped).empty,
             .index = 0,
-            .query = pair,
+            .query = filter,
         };
         return Iterator{
             .pairs = list,
             .index = 0,
-            .query = pair,
+            .query = filter,
         };
+    }
+
+    pub fn traverse(self: *const Storage, gpa: std.mem.Allocator, desc: TraverseDesc) !TraverseIter {
+        return try TraverseIter.init(gpa, self, desc);
     }
 };
 
@@ -179,7 +244,7 @@ test "query respects relations" {
     try std.testing.expect(!storage.contains(query));
 }
 
-test "Query test" {
+test "Match test" {
     const gpa = std.testing.allocator;
     var storage = Storage.empty;
     defer storage.deinit(gpa);
@@ -200,7 +265,7 @@ test "Query test" {
         .dst = .{ .id = 20 },
     });
 
-    var it = storage.query(.{
+    var it = storage.match(.{
         .relation = ecs.typeId(TestRel),
         .src = Entity.any,
         .dst = .{ .id = 10 },
@@ -211,4 +276,60 @@ test "Query test" {
     const second = it.next() orelse return error.TestUnexpectedNull;
     try std.testing.expectEqual(@as(u32, 10), second.dst.id);
     try std.testing.expect(it.next() == null);
+}
+
+test "Traverse test" {
+    const gpa = std.testing.allocator;
+    var storage = Storage.empty;
+    defer storage.deinit(gpa);
+
+    try storage.add(gpa, .{
+        .relation = ecs.typeId(TestRel),
+        .src = .{ .id = 1 },
+        .dst = .{ .id = 10 },
+    });
+    try storage.add(gpa, .{
+        .relation = ecs.typeId(TestRel),
+        .src = .{ .id = 2 },
+        .dst = .{ .id = 10 },
+    });
+    try storage.add(gpa, .{
+        .relation = ecs.typeId(TestRel),
+        .src = .{ .id = 1 },
+        .dst = .{ .id = 20 },
+    });
+    try storage.add(gpa, .{
+        .relation = ecs.typeId(TestRel),
+        .src = .{ .id = 3 },
+        .dst = .{ .id = 20 },
+    });
+
+    var it = try storage.traverse(gpa, .{
+        .relation = ecs.typeId(TestRel),
+        .node = .{ .id = 1 },
+    });
+
+    var e = try it.next() orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 1), e.id);
+    e = try it.next() orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 10), e.id);
+    e = try it.next() orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 20), e.id);
+    try std.testing.expectEqual(try it.next(), null);
+    it.deinit();
+
+    it = try storage.traverse(gpa, .{
+        .relation = ecs.typeId(TestRel),
+        .node = .{ .id = 20 },
+        .reversed = true,
+    });
+
+    e = try it.next() orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 20), e.id);
+    e = try it.next() orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 1), e.id);
+    e = try it.next() orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 3), e.id);
+    try std.testing.expectEqual(try it.next(), null);
+    it.deinit();
 }
