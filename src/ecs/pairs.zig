@@ -45,6 +45,23 @@ pub const Storage = struct {
             it.index = it.pairs.items.len;
             return null;
         }
+
+        pub fn next_rev(it: *Iterator) ?PairUntyped {
+            var i: usize = it.pairs.items.len - it.index;
+            while (i > 0) {
+                i -= 1;
+                const pair = it.pairs.items[i];
+                const src_match = it.query.src.id == Entity.any.id or it.query.src.id == pair.src.id;
+                const dst_match = it.query.dst.id == Entity.any.id or it.query.dst.id == pair.dst.id;
+                if (src_match and dst_match) {
+                    it.index = it.pairs.items.len - i;
+                    return pair;
+                }
+            }
+
+            it.index = it.pairs.items.len;
+            return null;
+        }
     };
 
     pub const TraverseIter = struct {
@@ -66,13 +83,43 @@ pub const Storage = struct {
             };
 
             try res.queue.append(gpa, desc.node);
-            try res.found.put(gpa, desc.node, {});
+            if (desc.bfs)
+                try res.found.put(gpa, desc.node, {});
             return res;
         }
 
         pub fn next(self: *TraverseIter) !?Entity {
+            if (self.desc.bfs) return self.next_bfs();
+            return self.next_dfs();
+        }
+
+        fn next_dfs(self: *TraverseIter) !?Entity {
+            var current_node = self.queue.pop() orelse return null;
+            while (self.found.contains(current_node))
+                current_node = self.queue.pop() orelse return null;
+            try self.found.put(self.gpa, current_node, {});
+            const query: Pair = if (!self.desc.reversed) .{
+                .src = current_node,
+                .relation = self.desc.relation,
+                .dst = .any,
+            } else .{
+                .src = .any,
+                .relation = self.desc.relation,
+                .dst = current_node,
+            };
+
+            var matches = self.storage.match(query);
+            while (matches.next_rev()) |edge| {
+                const node = if (!self.desc.reversed) edge.dst else edge.src;
+                if (!self.found.contains(node))
+                    try self.queue.append(self.gpa, node);
+            }
+
+            return current_node;
+        }
+
+        fn next_bfs(self: *TraverseIter) !?Entity {
             if (self.next_idx >= self.queue.items.len) return null;
-            if (!self.desc.bfs) @panic("Not Implemented");
             const query: Pair = if (!self.desc.reversed) .{
                 .src = self.queue.items[self.next_idx],
                 .relation = self.desc.relation,
@@ -295,6 +342,11 @@ test "Traverse test" {
     });
     try storage.add(gpa, .{
         .relation = ecs.typeId(TestRel),
+        .src = .{ .id = 10 },
+        .dst = .{ .id = 20 },
+    });
+    try storage.add(gpa, .{
+        .relation = ecs.typeId(TestRel),
         .src = .{ .id = 1 },
         .dst = .{ .id = 20 },
     });
@@ -304,10 +356,12 @@ test "Traverse test" {
         .dst = .{ .id = 20 },
     });
 
+    // Test bfs
     var it = try storage.traverse(gpa, .{
         .relation = ecs.typeId(TestRel),
         .node = .{ .id = 1 },
     });
+    errdefer it.deinit();
 
     var e = try it.next() orelse return error.TestUnexpectedNull;
     try std.testing.expectEqual(@as(u32, 1), e.id);
@@ -318,6 +372,7 @@ test "Traverse test" {
     try std.testing.expectEqual(try it.next(), null);
     it.deinit();
 
+    // Test bfs reversed
     it = try storage.traverse(gpa, .{
         .relation = ecs.typeId(TestRel),
         .node = .{ .id = 20 },
@@ -327,7 +382,48 @@ test "Traverse test" {
     e = try it.next() orelse return error.TestUnexpectedNull;
     try std.testing.expectEqual(@as(u32, 20), e.id);
     e = try it.next() orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 10), e.id);
+    e = try it.next() orelse return error.TestUnexpectedNull;
     try std.testing.expectEqual(@as(u32, 1), e.id);
+    e = try it.next() orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 3), e.id);
+    e = try it.next() orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 2), e.id);
+    try std.testing.expectEqual(try it.next(), null);
+    it.deinit();
+
+    // Test dfs
+    it = try storage.traverse(gpa, .{
+        .relation = ecs.typeId(TestRel),
+        .node = .{ .id = 1 },
+        .bfs = false,
+    });
+
+    e = try it.next() orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 1), e.id);
+    e = try it.next() orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 10), e.id);
+    e = try it.next() orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 20), e.id);
+    try std.testing.expectEqual(try it.next(), null);
+    it.deinit();
+
+    // Test bfs reversed
+    it = try storage.traverse(gpa, .{
+        .relation = ecs.typeId(TestRel),
+        .node = .{ .id = 20 },
+        .bfs = false,
+        .reversed = true,
+    });
+
+    e = try it.next() orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 20), e.id);
+    e = try it.next() orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 10), e.id);
+    e = try it.next() orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 1), e.id);
+    e = try it.next() orelse return error.TestUnexpectedNull;
+    try std.testing.expectEqual(@as(u32, 2), e.id);
     e = try it.next() orelse return error.TestUnexpectedNull;
     try std.testing.expectEqual(@as(u32, 3), e.id);
     try std.testing.expectEqual(try it.next(), null);
