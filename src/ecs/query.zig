@@ -42,14 +42,14 @@ pub fn Iter(comptime Q: anytype) type {
         pub const ComponentBinding = ComponentBindings(&ComponentArray);
 
         query: *const Q,
-        entity: ecs.Entity,
+        entities: ?[]ecs.Entity,
         archetype: usize,
         binding: ComponentBinding,
 
         pub fn create(query: *const Q) Self {
             return .{
                 .query = query,
-                .entity = .none,
+                .entities = null,
                 .archetype = 0,
                 .binding = undefined,
             };
@@ -57,7 +57,8 @@ pub fn Iter(comptime Q: anytype) type {
 
         fn createBinding(self: *Self) void {
             std.debug.assert(self.query.archetypes.items.len > self.archetype);
-            const archetype = self.query.archetypes.items[self.archetype];
+            const archetype: *ecs.Archetype = self.query.archetypes.items[self.archetype];
+            self.entities = archetype.entities.items;
 
             inline for (&self.binding) |*bind| {
                 const T = @TypeOf(bind.*);
@@ -81,7 +82,7 @@ pub fn Iter(comptime Q: anytype) type {
                 defer self.archetype += 1;
                 return self.binding;
             }
-            self.entity = .none;
+            self.entities = null;
             return null;
         }
     };
