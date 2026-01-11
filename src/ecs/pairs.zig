@@ -8,16 +8,18 @@ pub const Pair = struct {
     relation: ecs.TypeId,
 };
 
-const PairUntyped = struct {
+pub const PairUntyped = struct {
     src: Entity,
     dst: Entity,
 };
 
-const TraverseDesc = struct {
+pub const TraverseDesc = struct {
     relation: ecs.TypeId,
     node: Entity,
     bfs: bool = true, // true: use bfs; false: use dfs
     reversed: bool = false,
+    filter: ?*const fn (Entity, *anyopaque) bool = null,
+    filter_ctx: ?*anyopaque = null,
 };
 
 pub const Storage = struct {
@@ -61,89 +63,6 @@ pub const Storage = struct {
 
             it.index = it.pairs.items.len;
             return null;
-        }
-    };
-
-    pub const TraverseIter = struct {
-        desc: TraverseDesc,
-        gpa: std.mem.Allocator,
-        storage: *const Storage,
-        queue: std.ArrayList(Entity),
-        found: std.AutoArrayHashMapUnmanaged(Entity, void),
-        next_idx: usize,
-
-        pub fn init(gpa: std.mem.Allocator, storage: *const Storage, desc: TraverseDesc) !TraverseIter {
-            var res = TraverseIter{
-                .desc = desc,
-                .gpa = gpa,
-                .storage = storage,
-                .queue = .empty,
-                .found = .empty,
-                .next_idx = 0,
-            };
-
-            try res.queue.append(gpa, desc.node);
-            if (desc.bfs)
-                try res.found.put(gpa, desc.node, {});
-            return res;
-        }
-
-        pub fn next(self: *TraverseIter) !?Entity {
-            if (self.desc.bfs) return self.next_bfs();
-            return self.next_dfs();
-        }
-
-        fn next_dfs(self: *TraverseIter) !?Entity {
-            var current_node = self.queue.pop() orelse return null;
-            while (self.found.contains(current_node))
-                current_node = self.queue.pop() orelse return null;
-            try self.found.put(self.gpa, current_node, {});
-            const query: Pair = if (!self.desc.reversed) .{
-                .src = current_node,
-                .relation = self.desc.relation,
-                .dst = .any,
-            } else .{
-                .src = .any,
-                .relation = self.desc.relation,
-                .dst = current_node,
-            };
-
-            var matches = self.storage.match(query);
-            while (matches.next_rev()) |edge| {
-                const node = if (!self.desc.reversed) edge.dst else edge.src;
-                if (!self.found.contains(node))
-                    try self.queue.append(self.gpa, node);
-            }
-
-            return current_node;
-        }
-
-        fn next_bfs(self: *TraverseIter) !?Entity {
-            if (self.next_idx >= self.queue.items.len) return null;
-            const query: Pair = if (!self.desc.reversed) .{
-                .src = self.queue.items[self.next_idx],
-                .relation = self.desc.relation,
-                .dst = .any,
-            } else .{
-                .src = .any,
-                .relation = self.desc.relation,
-                .dst = self.queue.items[self.next_idx],
-            };
-
-            var matches = self.storage.match(query);
-            while (matches.next()) |edge| {
-                const node = if (!self.desc.reversed) edge.dst else edge.src;
-                const res = try self.found.getOrPut(self.gpa, node);
-                if (!res.found_existing)
-                    try self.queue.append(self.gpa, node);
-            }
-            defer self.next_idx += 1;
-            return self.queue.items[self.next_idx];
-        }
-
-        pub fn deinit(self: *TraverseIter) void {
-            self.queue.deinit(self.gpa);
-            self.found.deinit(self.gpa);
         }
     };
 
@@ -197,6 +116,97 @@ pub const Storage = struct {
 
     pub fn traverse(self: *const Storage, gpa: std.mem.Allocator, desc: TraverseDesc) !TraverseIter {
         return try TraverseIter.init(gpa, self, desc);
+    }
+};
+
+pub const TraverseIter = struct {
+    desc: TraverseDesc,
+    gpa: std.mem.Allocator,
+    storage: *const Storage,
+    queue: std.ArrayList(Entity),
+    found: std.AutoArrayHashMapUnmanaged(Entity, void),
+    next_idx: usize,
+
+    pub fn init(gpa: std.mem.Allocator, storage: *const Storage, desc: TraverseDesc) !TraverseIter {
+        var res = TraverseIter{
+            .desc = desc,
+            .gpa = gpa,
+            .storage = storage,
+            .queue = .empty,
+            .found = .empty,
+            .next_idx = 0,
+        };
+
+        std.debug.assert((desc.filter == null and desc.filter_ctx == null) or (desc.filter != null and desc.filter_ctx != null));
+        std.debug.assert(desc.node.id != Entity.any.id); // [MAYBE] implement
+
+        try res.queue.append(gpa, desc.node);
+        if (desc.bfs)
+            try res.found.put(gpa, desc.node, {});
+        return res;
+    }
+
+    pub fn next(self: *TraverseIter) !?Entity {
+        if (self.desc.bfs) return self.next_bfs();
+        return self.next_dfs();
+    }
+
+    fn next_dfs(self: *TraverseIter) !?Entity {
+        var current_node = self.queue.pop() orelse return null;
+        while (self.found.contains(current_node))
+            current_node = self.queue.pop() orelse return null;
+        try self.found.put(self.gpa, current_node, {});
+        const query: Pair = if (!self.desc.reversed) .{
+            .src = current_node,
+            .relation = self.desc.relation,
+            .dst = .any,
+        } else .{
+            .src = .any,
+            .relation = self.desc.relation,
+            .dst = current_node,
+        };
+
+        var matches = self.storage.match(query);
+        while (matches.next_rev()) |edge| {
+            const node = if (!self.desc.reversed) edge.dst else edge.src;
+            if (self.found.contains(node)) continue;
+            if (self.desc.filter_ctx) |ctx| {
+                if (self.desc.filter) |filter| {
+                    if (!filter(node, ctx)) continue;
+                }
+            }
+            try self.queue.append(self.gpa, node);
+        }
+
+        return current_node;
+    }
+
+    fn next_bfs(self: *TraverseIter) !?Entity {
+        if (self.next_idx >= self.queue.items.len) return null;
+        const query: Pair = if (!self.desc.reversed) .{
+            .src = self.queue.items[self.next_idx],
+            .relation = self.desc.relation,
+            .dst = .any,
+        } else .{
+            .src = .any,
+            .relation = self.desc.relation,
+            .dst = self.queue.items[self.next_idx],
+        };
+
+        var matches = self.storage.match(query);
+        while (matches.next()) |edge| {
+            const node = if (!self.desc.reversed) edge.dst else edge.src;
+            const res = try self.found.getOrPut(self.gpa, node);
+            if (!res.found_existing)
+                try self.queue.append(self.gpa, node);
+        }
+        defer self.next_idx += 1;
+        return self.queue.items[self.next_idx];
+    }
+
+    pub fn deinit(self: *TraverseIter) void {
+        self.queue.deinit(self.gpa);
+        self.found.deinit(self.gpa);
     }
 };
 
