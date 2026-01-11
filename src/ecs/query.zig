@@ -34,6 +34,7 @@ pub fn ComponentBindings(comptime types: []const type) type {
     }
     return std.meta.Tuple(&res);
 }
+
 pub fn Iter(comptime Q: anytype) type {
     return struct {
         const Self = @This();
@@ -86,6 +87,66 @@ pub fn Iter(comptime Q: anytype) type {
     };
 }
 
+pub fn TraverseIter(comptime Q: type) type {
+    return struct {
+        const Self = @This();
+        pub const ComponentArray = Q.ComponentArray;
+        pub const ComponentBinding = ComponentBindings(&ComponentArray);
+
+        query: *const Q,
+        pair_iter: ecs.PairStorage.TraverseIter,
+        entity: ecs.Entity,
+        binding: ComponentBinding,
+
+        pub fn init(gpa: std.mem.Allocator, query: *const Q, desc: ecs.TraverseDesc) !Self {
+            return .{
+                .query = query,
+                .pair_iter = try query.world.pairStorage.traverse(gpa, desc),
+                .entity = .none,
+                .binding = undefined,
+            };
+        }
+
+        pub fn deinit(self: *Self) void {
+            self.pair_iter.deinit();
+        }
+
+        fn createBinding(self: *Self, archetype: *ecs.Archetype, idx: usize) void {
+            std.debug.assert(self.query.archetypes.items.len > idx);
+
+            inline for (&self.binding) |*bind| {
+                const T = @TypeOf(bind.*);
+                const info = @typeInfo(T);
+                if (info == .pointer) {
+                    if (info.pointer.is_const) {
+                        bind.* = archetype.getComponents(info.pointer.child).?[idx .. idx + 1];
+                    } else {
+                        bind.* = archetype.getComponentsMut(info.pointer.child).?[idx .. idx + 1];
+                    }
+                } else {
+                    bind.* = archetype.getComponentsMut(T).?[idx .. idx + 1];
+                }
+            }
+        }
+
+        pub fn next(self: *Self) !?ComponentBinding {
+            self.entity = try self.pair_iter.next() orelse {
+                self.entity = .none;
+                return null;
+            };
+            for (self.query.archetypes.items) |archetype| {
+                if (archetype.findEntity(self.entity)) |idx| {
+                    self.createBinding(archetype, idx);
+                    return self.binding;
+                }
+            }
+
+            self.entity = .none;
+            return null;
+        }
+    };
+}
+
 pub fn Query(components: anytype, filters: anytype) type {
     return struct {
         const Self = @This();
@@ -94,9 +155,10 @@ pub fn Query(components: anytype, filters: anytype) type {
         pub const FilterArray = parseTupleTypes(filters);
 
         archetypes: std.ArrayList(*ecs.Archetype),
+        world: *World,
 
         pub fn init(gpa: std.mem.Allocator, world: *World) !Self {
-            var res: Self = .{ .archetypes = .empty };
+            var res: Self = .{ .archetypes = .empty, .world = world };
             outer: for (world.storage.archetypes.items) |archetype| {
                 if (archetype.components.items.len < ComponentArray.len) continue;
 
@@ -121,6 +183,25 @@ pub fn Query(components: anytype, filters: anytype) type {
 
         pub fn iter(self: *Self) Iter(Self) {
             return Iter(Self).create(self);
+        }
+
+        pub fn traverse(self: *Self, gpa: std.mem.Allocator, _desc: ecs.TraverseDesc) !TraverseIter(Self) {
+            var desc = _desc;
+            std.debug.assert(desc.filter == null and desc.filter_ctx == null);
+            const filter = struct {
+                fn filter(entity: ecs.Entity, ctx: *anyopaque) bool {
+                    const queue: *Self = @ptrCast(@alignCast(ctx));
+                    for (queue.archetypes.items) |archetype| {
+                        if (archetype.findEntity(entity)) |_| return true;
+                    }
+                    return false;
+                }
+            }.filter;
+
+            desc.filter = filter;
+            desc.filter_ctx = @ptrCast(self);
+
+            return TraverseIter(Self).init(gpa, self, desc);
         }
     };
 }
