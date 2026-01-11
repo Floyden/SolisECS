@@ -5,6 +5,7 @@ pub const Entity = @import("ecs/Entity.zig");
 pub const Storage = @import("ecs/Storage.zig");
 pub const Pair = @import("ecs/pairs.zig").Pair;
 pub const PairStorage = @import("ecs/pairs.zig").Storage;
+pub const TraverseDesc = @import("ecs/pairs.zig").TraverseDesc;
 pub const World = @import("ecs/World.zig");
 
 pub const typeId = @import("ecs/type_id.zig").typeId;
