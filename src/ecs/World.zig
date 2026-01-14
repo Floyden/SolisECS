@@ -115,8 +115,6 @@ pub const System = struct {
 };
 
 pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: SystemDesc) !void {
-    _ = desc;
-
     const SystemType = @TypeOf(system);
     const system_info = @typeInfo(SystemType);
     if (system_info != .@"fn") @compileError("Only Functions supported in World.addSystem");
@@ -168,6 +166,7 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: SystemDesc
 
     const system_entity = try self.create(gpa);
     _ = try self.set(system_entity, System, system_component);
+    try self.addPair(system_entity, Entity.DependsOn, desc.stage);
 }
 
 pub fn step(self: *World) !void {
