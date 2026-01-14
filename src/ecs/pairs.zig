@@ -102,54 +102,62 @@ pub const Storage = struct {
         }
 
         fn next_dfs(self: *TraverseIter) !?Entity {
-            var current_node = self.queue.pop() orelse return null;
-            while (self.found.contains(current_node))
-                current_node = self.queue.pop() orelse return null;
-            try self.found.put(self.gpa, current_node, {});
-            const query: Pair = if (!self.desc.reversed) .{
-                .src = current_node,
-                .relation = self.desc.relation,
-                .dst = .any,
-            } else .{
-                .src = .any,
-                .relation = self.desc.relation,
-                .dst = current_node,
-            };
+            while (self.queue.items.len > 0) {
+                var current_node = self.queue.pop() orelse return null;
+                while (self.found.contains(current_node))
+                    current_node = self.queue.pop() orelse return null;
+                try self.found.put(self.gpa, current_node, {});
+                const query: Pair = if (!self.desc.reversed) .{
+                    .src = current_node,
+                    .relation = self.desc.relation,
+                    .dst = .any,
+                } else .{
+                    .src = .any,
+                    .relation = self.desc.relation,
+                    .dst = current_node,
+                };
 
-            var matches = self.storage.match(query);
-            while (matches.next_rev()) |edge| {
-                const node = if (!self.desc.reversed) edge.dst else edge.src;
-                if (self.found.contains(node)) continue;
-                if (self.desc.filter) |filter| {
-                    if (!filter.func(node, filter.ctx)) continue;
+                var matches = self.storage.match(query);
+                while (matches.next_rev()) |edge| {
+                    const node = if (!self.desc.reversed) edge.dst else edge.src;
+                    if (self.found.contains(node)) continue;
+                    try self.queue.append(self.gpa, node);
                 }
-                try self.queue.append(self.gpa, node);
-            }
 
-            return current_node;
+                if (self.desc.filter) |filter| {
+                    if (!filter.func(current_node, filter.ctx)) continue;
+                }
+                return current_node;
+            }
+            return null;
         }
 
         fn next_bfs(self: *TraverseIter) !?Entity {
-            if (self.next_idx >= self.queue.items.len) return null;
-            const query: Pair = if (!self.desc.reversed) .{
-                .src = self.queue.items[self.next_idx],
-                .relation = self.desc.relation,
-                .dst = .any,
-            } else .{
-                .src = .any,
-                .relation = self.desc.relation,
-                .dst = self.queue.items[self.next_idx],
-            };
+            while (self.next_idx < self.queue.items.len) {
+                const query: Pair = if (!self.desc.reversed) .{
+                    .src = self.queue.items[self.next_idx],
+                    .relation = self.desc.relation,
+                    .dst = .any,
+                } else .{
+                    .src = .any,
+                    .relation = self.desc.relation,
+                    .dst = self.queue.items[self.next_idx],
+                };
 
-            var matches = self.storage.match(query);
-            while (matches.next()) |edge| {
-                const node = if (!self.desc.reversed) edge.dst else edge.src;
-                const res = try self.found.getOrPut(self.gpa, node);
-                if (!res.found_existing)
-                    try self.queue.append(self.gpa, node);
+                var matches = self.storage.match(query);
+                while (matches.next()) |edge| {
+                    const node = if (!self.desc.reversed) edge.dst else edge.src;
+                    const res = try self.found.getOrPut(self.gpa, node);
+                    if (!res.found_existing)
+                        try self.queue.append(self.gpa, node);
+                }
+                defer self.next_idx += 1;
+                if (self.desc.filter) |filter| {
+                    if (filter.func(self.queue.items[self.next_idx], filter.ctx)) continue;
+                }
+                return self.queue.items[self.next_idx];
             }
-            defer self.next_idx += 1;
-            return self.queue.items[self.next_idx];
+            return null;
         }
 
         pub fn deinit(self: *TraverseIter) void {
