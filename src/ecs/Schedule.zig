@@ -37,11 +37,55 @@ pub fn init(gpa: std.mem.Allocator, world: *World) !void {
 }
 
 pub fn run_startup(world: *World) !void {
-    _ = world;
-    // const query = Query(.{System}, .{.deps = .{}});
+    // TODO: Filter disabled systems
+    var query = try Query(.{*ecs.System}, .{ .deps = .{} }).init(world.allocator, world);
+    defer query.deinit(world.allocator);
 
-    // 0. Find all systems
-    // 1. Find all stages which depend on .stage_startup
-    // 2. Traverse throguh all found stages, executing all systems within a stage.
-    // 3. Respect the dependencies of every system.
+    var stage_iter = try world.traverse(ecs.TraverseDesc{
+        .relation = ecs.typeId(Entity.DependsOn),
+        .node = .stage_startup,
+    });
+    defer stage_iter.deinit();
+
+    while (try stage_iter.next()) |stage| {
+        var sys_iter = try query.traverse(world.allocator, .{
+            .reversed = true,
+            .node = stage,
+            .relation = ecs.typeId(Entity.DependsOn),
+        });
+        defer sys_iter.deinit();
+
+        while (try sys_iter.next()) |node| {
+            const system: *ecs.System = &node.@"0"[0];
+            if (system.last_frame < world.frame) {
+                system.callback(system.context);
+                system.last_frame = world.frame;
+            }
+        }
+    }
+}
+
+var startup_executed = [2]bool{ false, false };
+test "Startup" {
+    const Systems = struct {
+        fn test_system1() void {
+            startup_executed[0] = true;
+        }
+        fn test_system2() void {
+            startup_executed[1] = true;
+        }
+    };
+
+    const gpa = std.testing.allocator;
+    var world = try World.init(gpa);
+    defer world.deinit();
+    world.frame = 1;
+
+    try world.addSystem(gpa, Systems.test_system1, .{ .stage = .stage_startup });
+    try world.addSystem(gpa, Systems.test_system2, .{ .stage = .stage_startup });
+
+    try run_startup(&world);
+
+    try std.testing.expect(startup_executed[0]);
+    try std.testing.expect(startup_executed[1]);
 }
