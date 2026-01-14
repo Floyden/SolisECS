@@ -62,6 +62,10 @@ pub fn hasPair(self: *World, a: Entity, comptime R: type, b: Entity) bool {
     return self.pairStorage.contains(.{ .src = a, .dst = b, .relation = typeId(R) });
 }
 
+pub fn traverse(self: *const World, desc: ecs.TraverseDesc) !ecs.PairStorage.TraverseIter {
+    return self.pairStorage.traverse(self.allocator, desc);
+}
+
 pub fn create(self: *World, allocator: Allocator) !Entity {
     defer self.nextEntity.id += 1;
     return self.storage.addEntity(allocator, self.nextEntity);
