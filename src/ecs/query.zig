@@ -44,14 +44,14 @@ pub fn Iter(comptime Q: anytype) type {
         query: *const Q,
         entities: ?[]ecs.Entity,
         archetype: usize,
-        binding: ComponentBinding,
+        binding: ?ComponentBinding,
 
         pub fn create(query: *const Q) Self {
             return .{
                 .query = query,
                 .entities = null,
                 .archetype = 0,
-                .binding = undefined,
+                .binding = null,
             };
         }
 
@@ -60,7 +60,7 @@ pub fn Iter(comptime Q: anytype) type {
             const archetype: *ecs.Archetype = self.query.archetypes.items[self.archetype];
             self.entities = archetype.entities.items;
 
-            inline for (&self.binding) |*bind| {
+            inline for (&self.binding.?) |*bind| {
                 const T = @TypeOf(bind.*);
                 const info = @typeInfo(T);
                 if (info == .pointer) {
@@ -97,14 +97,14 @@ pub fn TraverseIter(comptime Q: type) type {
         query: *const Q,
         pair_iter: ecs.PairStorage.TraverseIter,
         entity: ecs.Entity,
-        binding: ComponentBinding,
+        binding: ?ComponentBinding,
 
         pub fn init(gpa: std.mem.Allocator, query: *const Q, desc: ecs.TraverseDesc) !Self {
             return .{
                 .query = query,
                 .pair_iter = try query.world.pairStorage.traverse(gpa, desc),
                 .entity = .none,
-                .binding = undefined,
+                .binding = null,
             };
         }
 
@@ -115,7 +115,7 @@ pub fn TraverseIter(comptime Q: type) type {
         fn createBinding(self: *Self, archetype: *ecs.Archetype, idx: usize) void {
             std.debug.assert(self.query.archetypes.items.len > idx);
 
-            inline for (&self.binding) |*bind| {
+            inline for (&self.binding.?) |*bind| {
                 const T = @TypeOf(bind.*);
                 const info = @typeInfo(T);
                 if (info == .pointer) {
@@ -131,14 +131,13 @@ pub fn TraverseIter(comptime Q: type) type {
         }
 
         pub fn next(self: *Self) !?ComponentBinding {
-            self.entity = try self.pair_iter.next() orelse {
-                self.entity = .none;
-                return null;
-            };
-            for (self.query.archetypes.items) |archetype| {
-                if (archetype.findEntity(self.entity)) |idx| {
-                    self.createBinding(archetype, idx);
-                    return self.binding;
+            while (try self.pair_iter.next()) |entity| {
+                for (self.query.archetypes.items) |archetype| {
+                    if (archetype.findEntity(entity)) |idx| {
+                        self.entity = entity;
+                        self.createBinding(archetype, idx);
+                        return self.binding;
+                    }
                 }
             }
 
@@ -188,7 +187,6 @@ pub fn Query(components: anytype, filters: anytype) type {
 
         pub fn traverse(self: *Self, gpa: std.mem.Allocator, _desc: ecs.TraverseDesc) !TraverseIter(Self) {
             var desc = _desc;
-            std.debug.assert(desc.filter == null and desc.filter_ctx == null);
             const filter = struct {
                 fn filter(entity: ecs.Entity, ctx: *anyopaque) bool {
                     const queue: *Self = @ptrCast(@alignCast(ctx));
@@ -199,8 +197,7 @@ pub fn Query(components: anytype, filters: anytype) type {
                 }
             }.filter;
 
-            desc.filter = filter;
-            desc.filter_ctx = @ptrCast(self);
+            desc.filter = .{ .func = filter, .ctx = @ptrCast(self) };
 
             return TraverseIter(Self).init(gpa, self, desc);
         }
