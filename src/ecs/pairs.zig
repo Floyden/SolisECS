@@ -153,7 +153,7 @@ pub const Storage = struct {
                 }
                 defer self.next_idx += 1;
                 if (self.desc.filter) |filter| {
-                    if (filter.func(self.queue.items[self.next_idx], filter.ctx)) continue;
+                    if (!filter.func(self.queue.items[self.next_idx], filter.ctx)) continue;
                 }
                 return self.queue.items[self.next_idx];
             }

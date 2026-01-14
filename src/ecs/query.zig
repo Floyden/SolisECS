@@ -112,10 +112,11 @@ pub fn TraverseIter(comptime Q: type) type {
             self.pair_iter.deinit();
         }
 
-        fn createBinding(self: *Self, archetype: *ecs.Archetype, idx: usize) void {
-            std.debug.assert(self.query.archetypes.items.len > idx);
+        fn createBinding(self: *Self, archetype: *const ecs.Archetype, idx: usize) void {
+            std.debug.assert(archetype.entities.items.len > idx);
 
-            inline for (&self.binding.?) |*bind| {
+            var binding: ComponentBinding = undefined;
+            inline for (&binding) |*bind| {
                 const T = @TypeOf(bind.*);
                 const info = @typeInfo(T);
                 if (info == .pointer) {
@@ -128,6 +129,7 @@ pub fn TraverseIter(comptime Q: type) type {
                     bind.* = archetype.getComponentsMut(T).?[idx .. idx + 1];
                 }
             }
+            self.binding = binding;
         }
 
         pub fn next(self: *Self) !?ComponentBinding {
