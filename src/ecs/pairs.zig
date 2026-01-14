@@ -13,13 +13,17 @@ pub const PairUntyped = struct {
     dst: Entity,
 };
 
+pub const FilterDesc = struct {
+    func: *const fn (Entity, *anyopaque) bool,
+    ctx: *anyopaque,
+};
+
 pub const TraverseDesc = struct {
     relation: ecs.TypeId,
     node: Entity,
     bfs: bool = true, // true: use bfs; false: use dfs
     reversed: bool = false,
-    filter: ?*const fn (Entity, *anyopaque) bool = null,
-    filter_ctx: ?*anyopaque = null,
+    filter: ?FilterDesc = null,
 };
 
 pub const Storage = struct {
@@ -84,7 +88,6 @@ pub const Storage = struct {
                 .next_idx = 0,
             };
 
-            std.debug.assert((desc.filter == null and desc.filter_ctx == null) or (desc.filter != null and desc.filter_ctx != null));
             std.debug.assert(desc.node.id != Entity.any.id); // [MAYBE] implement
 
             try res.queue.append(gpa, desc.node);
@@ -117,10 +120,8 @@ pub const Storage = struct {
             while (matches.next_rev()) |edge| {
                 const node = if (!self.desc.reversed) edge.dst else edge.src;
                 if (self.found.contains(node)) continue;
-                if (self.desc.filter_ctx) |ctx| {
-                    if (self.desc.filter) |filter| {
-                        if (!filter(node, ctx)) continue;
-                    }
+                if (self.desc.filter) |filter| {
+                    if (!filter.func(node, filter.ctx)) continue;
                 }
                 try self.queue.append(self.gpa, node);
             }
