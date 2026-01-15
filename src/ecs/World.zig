@@ -92,27 +92,7 @@ pub fn getMut(self: *World, entity: Entity, comptime T: type) ?*T {
     return self.storage.getMut(T, entity);
 }
 
-pub const SystemDesc = struct {
-    stage: Entity = .stage_update,
-    // dependencies
-};
-
-pub const System = struct {
-    callback: *const fn (*anyopaque) void,
-    deinit_cb: *const fn (*anyopaque, gpa: Allocator) void,
-    context: *anyopaque,
-    last_frame: u64 = 0,
-
-    pub fn deinit(self: *System, gpa: Allocator) void {
-        @call(.auto, self.deinit_cb, .{ self.context, gpa });
-    }
-
-    pub fn invoke(self: System) void {
-        @call(.auto, self.callback, .{self.context});
-    }
-};
-
-pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: SystemDesc) !void {
+pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.SystemDesc) !void {
     const SystemType = @TypeOf(system);
     const system_info = @typeInfo(SystemType);
     if (system_info != .@"fn") @compileError("Only Functions supported in World.addSystem");
@@ -156,29 +136,18 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: SystemDesc
         }
     }
 
-    const system_component = System{
+    const system_component = ecs.System{
         .callback = @ptrCast(&Context.invoke),
         .deinit_cb = @ptrCast(&Context.deinit),
         .context = ctx,
     };
 
     const system_entity = try self.create(gpa);
-    _ = try self.set(system_entity, System, system_component);
+    _ = try self.set(system_entity, ecs.System, system_component);
     try self.addPair(system_entity, Entity.DependsOn, desc.stage);
 }
 
 pub fn step(self: *World) !void {
     self.frame += 1;
-    ecs.Schedule.run_pipeline(self);
-
-    // var query = try Query(.{*System}, .{}).init(self.allocator, self);
-    // defer query.deinit(self.allocator);
-    //
-    // var iter = QueryIter(@TypeOf(query)).create(&query);
-    // while (iter.next()) |bind| {
-    //     for (bind.@"0") |*system| {
-    //         system.invoke();
-    //         system.last_frame = self.frame;
-    //     }
-    // }
+    try ecs.Schedule.run_pipeline(self);
 }
