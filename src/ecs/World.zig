@@ -6,6 +6,8 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Entity = ecs.Entity;
 const ComponentDesc = ecs.ComponentDesc;
+const Query = ecs.Query;
+const QueryIter = ecs.QueryIter;
 
 const World = @This();
 
@@ -16,16 +18,18 @@ pairStorage: ecs.PairStorage,
 
 nextEntity: Entity,
 
+frame: usize,
+
 pub fn init(allocator: Allocator) !World {
     var world = World{
         .allocator = allocator,
         .components = .empty,
         .nextEntity = .{ .id = 1 },
-        .storage = undefined,
+        .storage = try .init(allocator),
         .pairStorage = .empty,
+        .frame = 0,
     };
-
-    world.storage = try .init(allocator);
+    try ecs.Schedule.init(allocator, &world);
 
     return world;
 }
@@ -71,6 +75,11 @@ pub fn create(self: *World, allocator: Allocator) !Entity {
     return self.storage.addEntity(allocator, self.nextEntity);
 }
 
+/// Insert an existing entity into the world. Used for internal entities.
+pub fn insertEntity(self: *World, gpa: Allocator, entity: Entity) !void {
+    _ = try self.storage.addEntity(gpa, entity);
+}
+
 pub fn set(self: *World, entity: Entity, comptime T: type, arg: T) !void {
     try self.storage.setComponents(self.allocator, entity, T, arg);
 }
@@ -81,4 +90,95 @@ pub fn get(self: *World, entity: Entity, comptime T: type) ?*const T {
 
 pub fn getMut(self: *World, entity: Entity, comptime T: type) ?*T {
     return self.storage.getMut(T, entity);
+}
+
+pub const SystemDesc = struct {
+    stage: Entity = .stage_update,
+    // dependencies
+};
+
+pub const System = struct {
+    callback: *const fn (*anyopaque) void,
+    deinit_cb: *const fn (*anyopaque, gpa: Allocator) void,
+    context: *anyopaque,
+    last_frame: u64 = 0,
+
+    pub fn deinit(self: *System, gpa: Allocator) void {
+        @call(.auto, self.deinit_cb, .{ self.context, gpa });
+    }
+
+    pub fn invoke(self: System) void {
+        @call(.auto, self.callback, .{self.context});
+    }
+};
+
+pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: SystemDesc) !void {
+    const SystemType = @TypeOf(system);
+    const system_info = @typeInfo(SystemType);
+    if (system_info != .@"fn") @compileError("Only Functions supported in World.addSystem");
+
+    const TupleType = std.meta.ArgsTuple(SystemType);
+
+    const Context = struct {
+        callback: *const SystemType,
+        params: TupleType,
+
+        fn deinit(self_ctx: *@This(), gpa_ctx: Allocator) void {
+            inline for (&self_ctx.params) |*param| {
+                const T = @TypeOf(param.*);
+                if (T == *World or T == *const World) continue;
+                if (@hasDecl(T, "deinit")) {
+                    param.deinit(gpa_ctx);
+                }
+            }
+            gpa_ctx.destroy(self_ctx);
+        }
+
+        fn invoke(self_ctx: *const @This()) void {
+            @call(.auto, self_ctx.callback, self_ctx.params);
+        }
+    };
+    const ctx: *Context = try gpa.create(Context);
+    const tuple = &ctx.params;
+    ctx.callback = system;
+
+    const params = system_info.@"fn".params;
+    inline for (params, 0..) |param, i| {
+        const field_name = comptime std.fmt.comptimePrint("{}", .{i});
+        switch (param.type.?) {
+            World => @compileError("World as parameter not supported, use *World or *const World"),
+            *World, *const World => {
+                @field(tuple.*, field_name) = self;
+            },
+            else => |t| {
+                @field(tuple.*, field_name) = try t.init(gpa, self);
+            },
+        }
+    }
+
+    const system_component = System{
+        .callback = @ptrCast(&Context.invoke),
+        .deinit_cb = @ptrCast(&Context.deinit),
+        .context = ctx,
+    };
+
+    const system_entity = try self.create(gpa);
+    _ = try self.set(system_entity, System, system_component);
+    try self.addPair(system_entity, Entity.DependsOn, desc.stage);
+}
+
+pub fn step(self: *World) !void {
+    self.frame += 1;
+    ecs.Schedule.run_pipeline(self);
+
+    // var query = try Query(.{*System}, .{}).init(self.allocator, self);
+    // defer query.deinit(self.allocator);
+    //
+    // var iter = QueryIter(@TypeOf(query)).create(&query);
+    // while (iter.next()) |bind| {
+    //     for (bind.@"0") |*system| {
+    //         system.invoke();
+    //         system.last_frame = self.frame;
+    //     }
+    // }
 }
