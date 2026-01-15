@@ -16,7 +16,6 @@ components: std.AutoHashMapUnmanaged(ComponentDesc, void),
 storage: ecs.Storage,
 pairStorage: ecs.PairStorage,
 
-schedule: Entity,
 nextEntity: Entity,
 
 frame: usize,
@@ -26,7 +25,6 @@ pub fn init(allocator: Allocator) !World {
         .allocator = allocator,
         .components = .empty,
         .nextEntity = .{ .id = 1 },
-        .schedule = undefined,
         .storage = try .init(allocator),
         .pairStorage = .empty,
         .frame = 0,
@@ -171,15 +169,16 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: SystemDesc
 
 pub fn step(self: *World) !void {
     self.frame += 1;
+    ecs.Schedule.run_pipeline(self);
 
-    var query = try Query(.{*System}, .{}).init(self.allocator, self);
-    defer query.deinit(self.allocator);
-
-    var iter = QueryIter(@TypeOf(query)).create(&query);
-    while (iter.next()) |bind| {
-        for (bind.@"0") |*system| {
-            system.invoke();
-            system.last_frame = self.frame;
-        }
-    }
+    // var query = try Query(.{*System}, .{}).init(self.allocator, self);
+    // defer query.deinit(self.allocator);
+    //
+    // var iter = QueryIter(@TypeOf(query)).create(&query);
+    // while (iter.next()) |bind| {
+    //     for (bind.@"0") |*system| {
+    //         system.invoke();
+    //         system.last_frame = self.frame;
+    //     }
+    // }
 }
