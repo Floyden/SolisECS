@@ -60,7 +60,8 @@ pub fn Iter(comptime Q: anytype) type {
             const archetype: *ecs.Archetype = self.query.archetypes.items[self.archetype];
             self.entities = archetype.entities.items;
 
-            inline for (&self.binding.?) |*bind| {
+            var binding: ComponentBinding = undefined;
+            inline for (&binding) |*bind| {
                 const T = @TypeOf(bind.*);
                 const info = @typeInfo(T);
                 if (info == .pointer) {
@@ -73,6 +74,7 @@ pub fn Iter(comptime Q: anytype) type {
                     bind.* = archetype.getComponentsMut(T).?;
                 }
             }
+            self.binding = binding;
         }
 
         pub fn next(self: *Self) ?ComponentBinding {
