@@ -3,6 +3,7 @@ pub const ComponentDesc = @import("ecs/components.zig").Description;
 pub const ComponentList = @import("ecs/components.zig").List;
 pub const Entity = @import("ecs/Entity.zig");
 pub const Schedule = @import("ecs/Schedule.zig");
+pub const Single = @import("ecs/single.zig").Single;
 pub const Storage = @import("ecs/Storage.zig");
 pub const System = @import("ecs/System.zig").System;
 pub const SystemDesc = @import("ecs/System.zig").SystemDesc;
