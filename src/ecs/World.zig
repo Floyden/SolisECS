@@ -106,7 +106,7 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
         fn deinit(self_ctx: *@This(), gpa_ctx: Allocator) void {
             inline for (&self_ctx.params) |*param| {
                 const T = @TypeOf(param.*);
-                if (T == *World or T == *const World) continue;
+                if (@typeInfo(T) == .pointer) continue;
                 if (@hasDecl(T, "deinit")) {
                     param.deinit(gpa_ctx);
                 }

@@ -14,8 +14,8 @@ pub const PairUntyped = struct {
 };
 
 pub const FilterDesc = struct {
-    func: *const fn (Entity, *anyopaque) bool,
-    ctx: *anyopaque,
+    func: *const fn (Entity, *const anyopaque) bool,
+    ctx: *const anyopaque,
 };
 
 pub const TraverseDesc = struct {

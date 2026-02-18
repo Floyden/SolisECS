@@ -185,15 +185,15 @@ pub fn Query(components: anytype, filters: anytype) type {
             self.archetypes.deinit(gpa);
         }
 
-        pub fn iter(self: *Self) Iter(Self) {
+        pub fn iter(self: *const Self) Iter(Self) {
             return Iter(Self).create(self);
         }
 
-        pub fn traverse(self: *Self, gpa: std.mem.Allocator, _desc: ecs.TraverseDesc) !TraverseIter(Self) {
+        pub fn traverse(self: *const Self, gpa: std.mem.Allocator, _desc: ecs.TraverseDesc) !TraverseIter(Self) {
             var desc = _desc;
             const filter = struct {
-                fn filter(entity: ecs.Entity, ctx: *anyopaque) bool {
-                    const queue: *Self = @ptrCast(@alignCast(ctx));
+                fn filter(entity: ecs.Entity, ctx: *const anyopaque) bool {
+                    const queue: *const Self = @ptrCast(@alignCast(ctx));
                     for (queue.archetypes.items) |archetype| {
                         if (archetype.findEntity(entity)) |_| return true;
                     }
