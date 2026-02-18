@@ -1,6 +1,7 @@
 pub const Archetype = @import("ecs/Archetype.zig");
 pub const ComponentDesc = @import("ecs/components.zig").Description;
 pub const ComponentList = @import("ecs/components.zig").List;
+pub const Commands = @import("ecs/Commands.zig");
 pub const Entity = @import("ecs/Entity.zig");
 pub const Schedule = @import("ecs/Schedule.zig");
 pub const Global = @import("ecs/global.zig").Global;

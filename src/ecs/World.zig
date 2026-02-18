@@ -12,6 +12,7 @@ const QueryIter = ecs.QueryIter;
 const World = @This();
 
 allocator: Allocator,
+commands: ecs.Commands,
 components: std.AutoHashMapUnmanaged(ComponentDesc, void),
 storage: ecs.Storage,
 pairStorage: ecs.PairStorage,
@@ -23,6 +24,7 @@ frame: usize,
 pub fn init(allocator: Allocator) !World {
     var world = World{
         .allocator = allocator,
+        .commands = .init(),
         .components = .empty,
         .nextEntity = .{ .id = 1 },
         .storage = try .init(allocator),
@@ -131,6 +133,9 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
     inline for (params, 0..) |param, i| {
         const field_name = comptime std.fmt.comptimePrint("{}", .{i});
         switch (param.type.?) {
+            std.mem.Allocator => @field(tuple.*, field_name) = self.allocator,
+            ecs.Commands, *const ecs.Commands => @compileError("Found const Commands as system parameter, use *Commands"),
+            *ecs.Commands => @field(tuple.*, field_name) = &self.commands,
             World => @compileError("World as parameter not supported, use *World or *const World"),
             *World, *const World => {
                 @field(tuple.*, field_name) = self;
