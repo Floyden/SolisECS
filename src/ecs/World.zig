@@ -150,4 +150,5 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
 pub fn step(self: *World) !void {
     self.frame += 1;
     try ecs.Schedule.run_pipeline(self);
+    self.storage.removeMarked();
 }

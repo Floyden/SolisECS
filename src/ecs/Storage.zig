@@ -10,6 +10,7 @@ const Storage = @This();
 // TODO: Figure out how to store stable pointers
 archetypes: std.ArrayList(*Archetype),
 singletons: *Archetype,
+marked: std.ArrayList(Entity), // marked for removal
 
 pub fn init(allocator: Allocator) !Storage {
     var archetypes: std.ArrayList(*Archetype) = .empty;
@@ -26,6 +27,7 @@ pub fn init(allocator: Allocator) !Storage {
     return Storage{
         .archetypes = archetypes,
         .singletons = singletons_ptr,
+        .marked = .empty,
     };
 }
 
@@ -43,13 +45,15 @@ pub fn addEntity(self: *Storage, allocator: std.mem.Allocator, entity: Entity) !
     return entity;
 }
 
-pub fn markEntity(self: *Storage, entity: Entity) void {
-    _ = entity;
-    _ = self;
+pub fn markEntity(self: *Storage, gpa: std.mem.Allocator, entity: Entity) void {
+    self.marked.append(gpa, entity);
 }
 
 pub fn removeMarked(self: *Storage) void {
-    _ = self;
+    for (self.marked.items) |entity| {
+        self.removeEntity(entity);
+    }
+    self.marked.clearRetainingCapacity();
 }
 
 pub fn removeEntity(self: *Storage, entity: Entity) void {
