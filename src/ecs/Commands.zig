@@ -7,7 +7,6 @@ const ApplyFunc: type = *const fn (?*anyopaque, *ecs.World) void;
 const Command = struct {
     apply: ApplyFunc,
     ctx: ?*anyopaque,
-    d_tor: ?*const fn (*anyopaque, std.mem.Allocator) void = null,
 };
 
 buffer: std.ArrayList(Command),
@@ -49,31 +48,21 @@ fn SpawnCommand(ComponentT: type) type {
         components: ComponentT,
         fn spawnTask(self_opt: ?*anyopaque, world: *ecs.World) void {
             const entity = world.create(world.allocator) catch @panic("Entity Creation failed");
-            std.log.debug("Spawned Entity", .{});
             if (@as(?*SpawnCommandT, @ptrCast(self_opt))) |self| {
                 inline for (self.components) |component| {
                     world.set(entity, @TypeOf(component), component) catch @panic("Failed to set components");
                 }
-                std.log.debug("With components: {}", .{self.components});
+                world.allocator.destroy(self);
             }
         }
 
         fn createCommand(gpa: std.mem.Allocator, components: ComponentT) !Command {
-            return Command{
-                .apply = spawnTask,
-                .ctx = try allocate(gpa, components),
-                .d_tor = deallocate,
-            };
-        }
-
-        fn allocate(gpa: std.mem.Allocator, components: ComponentT) !*SpawnCommandT {
             const res = try gpa.create(SpawnCommandT);
             res.components = components;
-            return res;
-        }
-
-        fn deallocate(self: *anyopaque, gpa: std.mem.Allocator) void {
-            gpa.destroy(@as(*SpawnCommandT, @ptrCast(self)));
+            return Command{
+                .apply = spawnTask,
+                .ctx = res,
+            };
         }
     };
 }
