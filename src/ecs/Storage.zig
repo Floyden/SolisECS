@@ -45,8 +45,8 @@ pub fn addEntity(self: *Storage, allocator: std.mem.Allocator, entity: Entity) !
     return entity;
 }
 
-pub fn markEntity(self: *Storage, gpa: std.mem.Allocator, entity: Entity) void {
-    self.marked.append(gpa, entity);
+pub fn markEntity(self: *Storage, gpa: std.mem.Allocator, entity: Entity) !void {
+    try self.marked.append(gpa, entity);
 }
 
 pub fn removeMarked(self: *Storage) void {
