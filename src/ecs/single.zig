@@ -8,7 +8,7 @@ pub fn Single(T: type) type {
         pub fn init(_: std.mem.Allocator, world: *World) !Self {
             std.debug.assert(world.getSingleton(T) != null);
             return .{
-                .value = world.getSingleton(T).?,
+                .value = world.getSingletonMut(T).?,
             };
         }
 

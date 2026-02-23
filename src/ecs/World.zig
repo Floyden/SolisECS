@@ -50,7 +50,11 @@ pub fn setSingleton(self: *World, comptime T: type, arg: T) !*T {
     return try self.storage.setSingleton(self.allocator, T, arg);
 }
 
-pub fn getSingleton(self: *World, comptime T: type) ?*T {
+pub fn getSingleton(self: *World, comptime T: type) ?*const T {
+    return self.storage.get(T, .singletons);
+}
+
+pub fn getSingletonMut(self: *World, comptime T: type) ?*T {
     return self.storage.getMut(T, .singletons);
 }
 
