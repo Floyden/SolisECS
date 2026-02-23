@@ -3,10 +3,11 @@ const ecs = @import("solis_ecs");
 
 const Self = @This();
 
-const ApplyFunc: type = *const fn (?*anyopaque, *ecs.World) void;
+const ApplyFunc: type = *const fn (*const Command, *ecs.World) void;
 const Command = struct {
     apply: ApplyFunc,
-    ctx: ?*anyopaque,
+    ctx: ?*anyopaque = null,
+    entity: ecs.Entity = .none,
 };
 
 buffer: std.ArrayList(Command),
@@ -23,22 +24,30 @@ pub fn deinit(self: *Self, gpa: std.mem.Allocator) void {
 
 pub fn execute(self: *Self, world: *ecs.World) void {
     for (self.buffer.items) |cmd| {
-        cmd.apply(cmd.ctx, world);
+        cmd.apply(&cmd, world);
     }
     self.buffer.clearRetainingCapacity();
 }
 
-pub fn queue(self: *Self, gpa: std.mem.Allocator, func: ApplyFunc, ctx: ?*anyopaque) !void {
-    try self.buffer.append(gpa, Command{ .apply = func, .ctx = ctx });
+pub fn queue(self: *Self, gpa: std.mem.Allocator, cmd: Command) !void {
+    try self.buffer.append(gpa, cmd);
 }
 
 pub fn spawn(self: *Self, gpa: std.mem.Allocator, components: anytype) !void {
     const cmd = try SpawnCommand(@TypeOf(components)).createCommand(gpa, components);
-    try self.buffer.append(gpa, cmd);
+    try self.queue(gpa, cmd);
 }
 
 pub fn spawnEmpty(self: *Self, gpa: std.mem.Allocator) !void {
-    try self.queue(gpa, SpawnCommand(.{}).spawnTask, null);
+    try self.queue(gpa, Command{ .apply = SpawnCommand(.{}).spawnTask });
+}
+
+pub fn despawn(self: *Self, gpa: std.mem.Allocator, entity: ecs.Entity) !void {
+    try self.queue(gpa, Command{ .apply = despawnTask, .entity = entity });
+}
+
+fn despawnTask(cmd: *const Command, world: *ecs.World) void {
+    world.storage.markEntity(world.allocator, cmd.entity) catch @panic("Failed to mark entities for deletion");
 }
 
 fn SpawnCommand(ComponentT: type) type {
@@ -46,9 +55,9 @@ fn SpawnCommand(ComponentT: type) type {
         const SpawnCommandT = @This();
 
         components: ComponentT,
-        fn spawnTask(self_opt: ?*anyopaque, world: *ecs.World) void {
+        fn spawnTask(cmd: *const Command, world: *ecs.World) void {
             const entity = world.create(world.allocator) catch @panic("Entity Creation failed");
-            if (@as(?*SpawnCommandT, @ptrCast(self_opt))) |self| {
+            if (@as(?*SpawnCommandT, @ptrCast(cmd.ctx))) |self| {
                 inline for (self.components) |component| {
                     world.set(entity, @TypeOf(component), component) catch @panic("Failed to set components");
                 }
