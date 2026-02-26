@@ -12,6 +12,8 @@ archetypes: std.ArrayList(*Archetype),
 globals: *Archetype,
 marked: std.ArrayList(Entity), // marked for removal
 
+entity_map: std.AutoArrayHashMapUnmanaged(Entity, *Archetype),
+
 pub fn init(allocator: Allocator) !Storage {
     var archetypes: std.ArrayList(*Archetype) = .empty;
     const empty_ptr = try allocator.create(Archetype);
@@ -28,6 +30,7 @@ pub fn init(allocator: Allocator) !Storage {
         .archetypes = archetypes,
         .globals = globals_ptr,
         .marked = .empty,
+        .entity_map = try .init(allocator, &[_]Entity{.globals}, &[_]*Archetype{globals_ptr}),
     };
 }
 
@@ -37,11 +40,13 @@ pub fn deinit(self: *Storage, gpa: Allocator) void {
         gpa.destroy(list);
     }
     self.archetypes.deinit(gpa);
+    self.entity_map.deinit(gpa);
 }
 
 pub fn addEntity(self: *Storage, allocator: std.mem.Allocator, entity: Entity) !Entity {
     // Store entity in Archetype without components
     try self.archetypes.items[0].addEntity(allocator, entity);
+    try self.entity_map.put(allocator, entity, self.archetypes.items[0]);
     return entity;
 }
 
@@ -57,19 +62,14 @@ pub fn removeMarked(self: *Storage) void {
 }
 
 pub fn removeEntity(self: *Storage, entity: Entity) void {
-    for (self.archetypes.items) |i| {
-        if (i.findEntity(entity)) |_| {
-            i.removeEntity(entity);
-            return;
-        }
-    }
+    const at = self.entity_map.get(entity) orelse return;
+    at.removeEntity(entity);
 }
 
-fn findArchetype(self: *const Storage, entity: Entity) ?struct { index: usize, archetype: *Archetype } {
-    for (0..self.archetypes.items.len) |i| {
-        if (self.archetypes.items[i].findEntity(entity)) |value| {
-            return .{ .index = value, .archetype = self.archetypes.items[i] };
-        }
+fn findLocation(self: *const Storage, entity: Entity) ?struct { index: usize, archetype: *Archetype } {
+    const at = self.entity_map.get(entity) orelse return null;
+    if (at.findEntity(entity)) |value| {
+        return .{ .index = value, .archetype = at };
     }
     return null;
 }
@@ -96,7 +96,7 @@ pub fn getGlobal(self: *const Storage, comptime T: type) ?*T {
 }
 
 pub fn get(self: *const Storage, comptime T: type, entity: Entity) ?*const T {
-    const location = self.findArchetype(entity) orelse return null;
+    const location = self.findLocation(entity) orelse return null;
     const source = location.archetype;
     const index = location.index;
 
@@ -111,7 +111,7 @@ pub fn get(self: *const Storage, comptime T: type, entity: Entity) ?*const T {
 }
 
 pub fn getMut(self: *const Storage, comptime T: type, entity: Entity) ?*T {
-    const location = self.findArchetype(entity) orelse return null;
+    const location = self.findLocation(entity) orelse return null;
     const source = location.archetype;
     const index = location.index;
 
@@ -128,7 +128,7 @@ pub fn getMut(self: *const Storage, comptime T: type, entity: Entity) ?*T {
 
 pub fn removeComponent(self: *Storage, gpa: Allocator, entity: Entity, comptime T: type) !void {
     // Find Archetype of the Entity
-    const location = self.findArchetype(entity) orelse return error.EntityNotFound;
+    const location = self.findLocation(entity) orelse return error.EntityNotFound;
     const entityIdx = location.index;
     var source = location.archetype;
 
@@ -167,11 +167,12 @@ pub fn removeComponent(self: *Storage, gpa: Allocator, entity: Entity, comptime 
         try component.appendRaw(gpa, source.components.items[index.?].getSingleRaw(entityIdx));
     }
     source.removeEntity(entity);
+    try self.entity_map.put(gpa, entity, destination.?);
 }
 
 pub fn setComponents(self: *Storage, gpa: Allocator, entity: Entity, comptime T: type, arg: T) !*T {
     // Find Archetype of the Entity
-    const location = self.findArchetype(entity) orelse return error.EntityNotFound;
+    const location = self.findLocation(entity) orelse return error.EntityNotFound;
     const entityIdx = location.index;
     var source = location.archetype;
 
@@ -224,6 +225,7 @@ pub fn setComponents(self: *Storage, gpa: Allocator, entity: Entity, comptime T:
         }
     }
     source.removeEntity(entity);
+    try self.entity_map.put(gpa, entity, destination.?);
 
     return component_ptr;
 }
@@ -280,7 +282,7 @@ test "Remove Component directly" {
 
     try storage.removeComponent(gpa, e, Position);
 
-    try std.testing.expect(storage.findArchetype(e) != null);
+    try std.testing.expect(storage.findLocation(e) != null);
     try std.testing.expect(storage.get(Position, e) == null);
 }
 
