@@ -161,7 +161,7 @@ pub fn Query(components: anytype, filters: anytype) type {
         archetypes: std.ArrayList(*ecs.Archetype),
         world: *World,
 
-        pub fn init(gpa: std.mem.Allocator, world: *World) !Self {
+        pub fn init(gpa: std.mem.Allocator, world: *World, _: ecs.Entity) !Self {
             var res: Self = .{ .archetypes = .empty, .world = world };
             outer: for (world.storage.archetypes.items) |archetype| {
                 if (archetype.components.items.len < ComponentArray.len) continue;

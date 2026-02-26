@@ -41,7 +41,7 @@ pub fn init(gpa: std.mem.Allocator, world: *World) !void {
 
 pub fn run_startup(world: *World) !void {
     // TODO: Filter disabled systems
-    var query = try Query(.{*ecs.System}, .{}).init(world.allocator, world);
+    var query = try Query(.{*ecs.System}, .{}).init(world.allocator, world, .none);
     defer query.deinit(world.allocator);
 
     var stage_iter = try world.traverse(ecs.TraverseDesc{
@@ -74,7 +74,7 @@ pub fn run_pipeline(world: *World) !void {
     if (world.frame == 0)
         try run_startup(world);
 
-    var query = try Query(.{*ecs.System}, .{}).init(world.allocator, world);
+    var query = try Query(.{*ecs.System}, .{}).init(world.allocator, world, .none);
     defer query.deinit(world.allocator);
 
     // TODO: stage_frame_start may not be the first stage of the system

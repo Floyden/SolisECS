@@ -1,11 +1,12 @@
 const std = @import("std");
 const World = @import("World.zig");
+const Entity = @import("Entity.zig");
 
 pub fn Single(T: type) type {
     return struct {
         const Self = @This();
         value: *T,
-        pub fn init(_: std.mem.Allocator, world: *World) !Self {
+        pub fn init(_: std.mem.Allocator, world: *World, _: Entity) !Self {
             std.debug.assert(world.getSingleton(T) != null);
             return .{
                 .value = world.getSingletonMut(T).?,

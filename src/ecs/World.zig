@@ -126,6 +126,7 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
     const tuple = &ctx.params;
     ctx.callback = system;
 
+    const system_entity = try self.create(gpa);
     const params = system_info.@"fn".params;
     inline for (params, 0..) |param, i| {
         const field_name = comptime std.fmt.comptimePrint("{}", .{i});
@@ -135,7 +136,7 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
                 @field(tuple.*, field_name) = self;
             },
             else => |t| {
-                @field(tuple.*, field_name) = try t.init(gpa, self);
+                @field(tuple.*, field_name) = try t.init(gpa, self, system_entity);
             },
         }
     }
@@ -146,7 +147,6 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
         .context = ctx,
     };
 
-    const system_entity = try self.create(gpa);
     _ = try self.set(system_entity, ecs.System, system_component);
     try self.addPair(system_entity, Entity.DependsOn, desc.stage);
 }
