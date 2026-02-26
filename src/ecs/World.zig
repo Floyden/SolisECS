@@ -84,8 +84,8 @@ pub fn insertEntity(self: *World, gpa: Allocator, entity: Entity) !void {
     _ = try self.storage.addEntity(gpa, entity);
 }
 
-pub fn set(self: *World, entity: Entity, comptime T: type, arg: T) !void {
-    try self.storage.setComponents(self.allocator, entity, T, arg);
+pub fn set(self: *World, entity: Entity, comptime T: type, arg: T) !*T {
+    return try self.storage.setComponents(self.allocator, entity, T, arg);
 }
 
 pub fn get(self: *World, entity: Entity, comptime T: type) ?*const T {

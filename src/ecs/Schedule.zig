@@ -19,17 +19,17 @@ pub fn init(gpa: std.mem.Allocator, world: *World) !void {
     // try world.set(schedule, Self, .{});
 
     try world.insertEntity(gpa, .stage_startup);
-    try world.set(.stage_startup, Stage, .{});
+    _ = try world.set(.stage_startup, Stage, .{});
     try world.insertEntity(gpa, .stage_frame_start);
-    try world.set(.stage_frame_start, Stage, .{});
+    _ = try world.set(.stage_frame_start, Stage, .{});
     try world.insertEntity(gpa, .stage_pre_update);
-    try world.set(.stage_pre_update, Stage, .{});
+    _ = try world.set(.stage_pre_update, Stage, .{});
     try world.insertEntity(gpa, .stage_update);
-    try world.set(.stage_update, Stage, .{});
+    _ = try world.set(.stage_update, Stage, .{});
     try world.insertEntity(gpa, .stage_post_update);
-    try world.set(.stage_post_update, Stage, .{});
+    _ = try world.set(.stage_post_update, Stage, .{});
     try world.insertEntity(gpa, .stage_frame_end);
-    try world.set(.stage_frame_end, Stage, .{});
+    _ = try world.set(.stage_frame_end, Stage, .{});
 
     try world.addPair(.stage_frame_end, Entity.DependsOn, .stage_post_update);
     try world.addPair(.stage_post_update, Entity.DependsOn, .stage_update);
