@@ -5,7 +5,7 @@ id: isize,
 pub const none: Self = .{ .id = 0 };
 
 // Internal Entities
-pub const singletons: Self = .{ .id = -1 };
+pub const globals: Self = .{ .id = -1 };
 
 // Comparison Entities
 pub const any: Self = .{ .id = -2 };

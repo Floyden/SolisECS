@@ -45,17 +45,17 @@ pub fn register(self: *World, allocator: Allocator, comptime T: type) !void {
     try self.components.put(allocator, ComponentDesc.get(T), {});
 }
 
-pub fn setSingleton(self: *World, comptime T: type, arg: T) !*T {
+pub fn setGlobal(self: *World, comptime T: type, arg: T) !*T {
     try self.components.put(self.allocator, ComponentDesc.get(T), {});
-    return try self.storage.setSingleton(self.allocator, T, arg);
+    return try self.storage.setGlobal(self.allocator, T, arg);
 }
 
-pub fn getSingleton(self: *World, comptime T: type) ?*const T {
-    return self.storage.get(T, .singletons);
+pub fn getGlobal(self: *World, comptime T: type) ?*const T {
+    return self.storage.get(T, .globals);
 }
 
-pub fn getSingletonMut(self: *World, comptime T: type) ?*T {
-    return self.storage.getMut(T, .singletons);
+pub fn getGlobalMut(self: *World, comptime T: type) ?*T {
+    return self.storage.getMut(T, .globals);
 }
 
 pub fn addPair(self: *World, a: Entity, comptime R: type, b: Entity) !void {

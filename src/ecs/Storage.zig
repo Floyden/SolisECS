@@ -9,7 +9,7 @@ const Storage = @This();
 
 // TODO: Figure out how to store stable pointers
 archetypes: std.ArrayList(*Archetype),
-singletons: *Archetype,
+globals: *Archetype,
 marked: std.ArrayList(Entity), // marked for removal
 
 pub fn init(allocator: Allocator) !Storage {
@@ -17,16 +17,16 @@ pub fn init(allocator: Allocator) !Storage {
     const empty_ptr = try allocator.create(Archetype);
     empty_ptr.* = Archetype.empty;
 
-    const singletons_ptr = try allocator.create(Archetype);
-    singletons_ptr.* = Archetype.empty;
-    try singletons_ptr.addEntity(allocator, .singletons);
+    const globals_ptr = try allocator.create(Archetype);
+    globals_ptr.* = Archetype.empty;
+    try globals_ptr.addEntity(allocator, .globals);
 
     try archetypes.append(allocator, empty_ptr); // Create Archetype for empty entities
-    try archetypes.append(allocator, singletons_ptr); // Create Archetype for singletons
+    try archetypes.append(allocator, globals_ptr); // Create Archetype for globals
 
     return Storage{
         .archetypes = archetypes,
-        .singletons = singletons_ptr,
+        .globals = globals_ptr,
         .marked = .empty,
     };
 }
@@ -74,23 +74,23 @@ fn findArchetype(self: *const Storage, entity: Entity) ?struct { index: usize, a
     return null;
 }
 
-pub fn setSingleton(self: *Storage, gpa: Allocator, comptime T: type, arg: T) !*T {
-    var idx_opt = self.singletons.getTypeLocation(T);
+pub fn setGlobal(self: *Storage, gpa: Allocator, comptime T: type, arg: T) !*T {
+    var idx_opt = self.globals.getTypeLocation(T);
     if (idx_opt == null) {
-        try self.singletons.expand(gpa, T);
-        idx_opt = self.singletons.getTypeLocation(T);
+        try self.globals.expand(gpa, T);
+        idx_opt = self.globals.getTypeLocation(T);
     }
 
-    var component_list = self.singletons.components.items[idx_opt.?];
+    var component_list = self.globals.components.items[idx_opt.?];
     std.debug.assert(component_list.data.items.len == @sizeOf(T));
     component_list.getMut(T)[0] = arg;
     return &component_list.getMut(T)[0];
 }
 
-pub fn getSingleton(self: *const Storage, comptime T: type) ?*T {
-    const idx_opt = self.singletons.getTypeLocation(T);
+pub fn getGlobal(self: *const Storage, comptime T: type) ?*T {
+    const idx_opt = self.globals.getTypeLocation(T);
     if (idx_opt) |idx| {
-        return &self.singletons.components.items[idx].getMut(T)[0];
+        return &self.globals.components.items[idx].getMut(T)[0];
     }
     return null;
 }
@@ -309,28 +309,28 @@ test "Remove Entity Directly" {
     try std.testing.expect(storage.get(Position, e) == null);
 }
 
-test "Basic Singleton" {
+test "Basic Global" {
     const gpa = std.testing.allocator;
     var storage = try Storage.init(gpa);
     defer storage.deinit(gpa);
 
-    const s = try storage.setSingleton(gpa, Gravity, .{ .g = 9.81 });
+    const s = try storage.setGlobal(gpa, Gravity, .{ .g = 9.81 });
 
     try std.testing.expectEqual(9.81, s.g);
 
-    const s2 = storage.getSingleton(Gravity) orelse return error.TestExpectedEqual;
+    const s2 = storage.getGlobal(Gravity) orelse return error.TestExpectedEqual;
     try std.testing.expect(s == s2);
 }
 
-test "Mutate Singleton" {
+test "Mutate Global" {
     const gpa = std.testing.allocator;
     var storage = try Storage.init(gpa);
     defer storage.deinit(gpa);
 
-    _ = try storage.setSingleton(gpa, Gravity, .{ .g = 9.81 });
-    _ = try storage.setSingleton(gpa, Gravity, .{ .g = 98.1 });
+    _ = try storage.setGlobal(gpa, Gravity, .{ .g = 9.81 });
+    _ = try storage.setGlobal(gpa, Gravity, .{ .g = 98.1 });
 
-    const s = storage.getSingleton(Gravity) orelse return error.TestExpectedEqual;
+    const s = storage.getGlobal(Gravity) orelse return error.TestExpectedEqual;
     try std.testing.expectEqual(98.1, s.g);
 }
 
