@@ -35,6 +35,16 @@ pub fn init(allocator: Allocator) !Storage {
 }
 
 pub fn deinit(self: *Storage, gpa: Allocator) void {
+    const keys = gpa.alloc(Entity, self.entity_map.count()) catch @panic("OOM");
+    defer gpa.free(keys);
+
+    @memcpy(keys, self.entity_map.keys());
+    std.sort.block(Entity, keys, {}, Entity.desc);
+    for (keys) |entity| {
+        const at = self.entity_map.get(entity) orelse continue;
+        at.removeEntity(gpa, entity);
+    }
+
     for (self.archetypes.items) |list| {
         list.deinit(gpa);
         gpa.destroy(list);
@@ -54,16 +64,16 @@ pub fn markEntity(self: *Storage, gpa: std.mem.Allocator, entity: Entity) !void 
     try self.marked.append(gpa, entity);
 }
 
-pub fn removeMarked(self: *Storage) void {
+pub fn removeMarked(self: *Storage, gpa: std.mem.Allocator) void {
     for (self.marked.items) |entity| {
-        self.removeEntity(entity);
+        self.removeEntity(gpa, entity);
     }
     self.marked.clearRetainingCapacity();
 }
 
-pub fn removeEntity(self: *Storage, entity: Entity) void {
+pub fn removeEntity(self: *Storage, gpa: std.mem.Allocator, entity: Entity) void {
     const at = self.entity_map.get(entity) orelse return;
-    at.removeEntity(entity);
+    at.removeEntity(gpa, entity);
 }
 
 fn findLocation(self: *const Storage, entity: Entity) ?struct { index: usize, archetype: *Archetype } {
@@ -294,7 +304,7 @@ test "Remove Entity Directly" {
     const e = try storage.addEntity(gpa, Entity{ .id = 42 });
     _ = try storage.setComponents(gpa, e, Position, .{ .x = 0, .y = 0 });
 
-    storage.removeEntity(e);
+    storage.removeEntity(gpa, e);
 
     try std.testing.expect(storage.get(Position, e) == null);
 }

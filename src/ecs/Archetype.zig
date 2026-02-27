@@ -74,10 +74,11 @@ pub fn findEntity(self: *const Archetype, entity: Entity) ?usize {
     return null;
 }
 
-pub fn removeEntity(self: *Archetype, entity: Entity) void {
+pub fn removeEntity(self: *Archetype, gpa: std.mem.Allocator, entity: Entity) void {
     const index = self.findEntity(entity) orelse return;
 
     for (self.components.items) |*component| {
+        component.deinitComponent(gpa, index);
         component.swapRemove(index);
     }
     _ = self.entities.swapRemove(index);
@@ -248,7 +249,7 @@ test "removeEntity" {
     try archetype.addEntity(gpa, e2);
     try archetype.addEntity(gpa, e3);
 
-    archetype.removeEntity(e2);
+    archetype.removeEntity(gpa, e2);
 
     try testing.expectEqual(@as(usize, 2), archetype.count());
     try testing.expect(archetype.findEntity(e2) == null);
@@ -257,7 +258,7 @@ test "removeEntity" {
         try testing.expectEqual(@as(usize, 2), list.count());
     }
 
-    archetype.removeEntity(e2);
+    archetype.removeEntity(gpa, e2);
     try testing.expectEqual(@as(usize, 2), archetype.count());
     for (archetype.components.items) |list| {
         try testing.expectEqual(@as(usize, 2), list.count());

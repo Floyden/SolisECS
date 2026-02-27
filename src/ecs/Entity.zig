@@ -4,11 +4,11 @@ id: isize,
 
 pub const none: Self = .{ .id = 0 };
 
-// Internal Entities
-pub const globals: Self = .{ .id = -1 };
-
 // Comparison Entities
-pub const any: Self = .{ .id = -2 };
+pub const any: Self = .{ .id = -1 };
+
+// Internal Entities
+pub const globals: Self = .{ .id = -10 };
 
 // System Stages
 pub const stage_startup: Self = .{ .id = -100 };
@@ -20,3 +20,11 @@ pub const stage_frame_end: Self = .{ .id = -105 };
 
 // Pairs
 pub const DependsOn = struct {};
+
+pub fn asc(_: void, a: Self, b: Self) bool {
+    return a.id < b.id;
+}
+
+pub fn desc(_: void, a: Self, b: Self) bool {
+    return a.id > b.id;
+}

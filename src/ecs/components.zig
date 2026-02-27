@@ -66,6 +66,13 @@ pub const List = struct {
         }
     }
 
+    pub fn deinitComponent(self: *List, gpa: std.mem.Allocator, index: usize) void {
+        if (self.desc.deinit) |deinit_ptr| {
+            const deinit_fn: *const fn (*anyopaque, std.mem.Allocator) void = @ptrCast(deinit_ptr);
+            deinit_fn(@ptrCast(self.getSingleRaw(index).ptr), gpa);
+        }
+    }
+
     pub fn get(self: *const List, comptime T: type) []const T {
         std.debug.assert(self.desc.id == ecs.typeId(T));
         return @as([*]const T, @ptrCast(@alignCast(self.data.items.ptr)))[0..self.count()];
@@ -76,7 +83,7 @@ pub const List = struct {
         return @as([*]T, @ptrCast(@alignCast(self.data.items.ptr)))[0..self.count()];
     }
 
-    pub fn getSingleRaw(self: *const List, index: usize) []const u8 {
+    pub fn getSingleRaw(self: *const List, index: usize) []u8 {
         const start = index * self.desc.size;
         const end = start + self.desc.size;
         std.debug.assert(end <= self.data.items.len);

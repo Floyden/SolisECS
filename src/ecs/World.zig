@@ -35,9 +35,9 @@ pub fn init(allocator: Allocator) !World {
 }
 
 pub fn deinit(self: *World) void {
-    self.components.deinit(self.allocator);
-    self.pairStorage.deinit(self.allocator);
     self.storage.deinit(self.allocator);
+    self.pairStorage.deinit(self.allocator);
+    self.components.deinit(self.allocator);
 }
 
 // [TODO] implement
@@ -154,5 +154,5 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
 pub fn step(self: *World) !void {
     self.frame += 1;
     try ecs.Schedule.run_pipeline(self);
-    self.storage.removeMarked();
+    self.storage.removeMarked(self.allocator);
 }
