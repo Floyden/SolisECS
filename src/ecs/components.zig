@@ -109,6 +109,12 @@ pub const Description = struct {
         comptime var deinit_ptr: ?*const anyopaque = null;
 
         if (@typeInfo(T) == .@"struct" and @hasDecl(T, "deinit")) {
+            const fn_type = @typeInfo(@TypeOf(T.deinit));
+            if (fn_type != .@"fn") @compileError("deinit is not a function");
+            if (fn_type.@"fn".params.len != 2 or
+                fn_type.@"fn".params[0].type.? != *T or
+                fn_type.@"fn".params[1].type.? != std.mem.Allocator) @compileError("deinit has not the signature \"fn deinit(*type, Allocator) void\"");
+
             deinit_ptr = @ptrCast(&@field(T, "deinit"));
         }
 
@@ -121,6 +127,7 @@ pub const Description = struct {
     }
 };
 
+// ----------- Test ----------------
 test "Basic" {
     const Position = struct { x: i32, y: i32, z: i32 };
     const allocator = std.testing.allocator;
@@ -161,4 +168,36 @@ test "Zero sized types" {
     try std.testing.expectEqual(2, values.len);
     try std.testing.expectEqual(Tag{}, values[0]);
     try std.testing.expectEqual(Tag{}, values[1]);
+}
+
+const TestComponent = struct {
+    test_mem: *usize,
+    deinit_called: *bool,
+
+    pub fn init(deinit_called: *bool, gpa: std.mem.Allocator) !TestComponent {
+        return TestComponent{
+            .test_mem = try gpa.create(usize),
+            .deinit_called = deinit_called,
+        };
+    }
+
+    pub fn deinit(self: *TestComponent, gpa: std.mem.Allocator) void {
+        gpa.destroy(self.test_mem);
+        self.deinit_called.* = true;
+    }
+};
+
+test "deinit components" {
+    const gpa = std.testing.allocator;
+
+    var deinit_called = false;
+
+    var list = List.init(Description.get(TestComponent));
+    defer list.deinit(gpa);
+
+    try list.append(gpa, TestComponent, try .init(&deinit_called, gpa));
+    try std.testing.expect(!deinit_called);
+    list.deinitComponent(gpa, 0);
+    list.swapRemove(0);
+    try std.testing.expect(deinit_called);
 }
