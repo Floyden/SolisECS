@@ -83,6 +83,25 @@ pub fn removeEntity(self: *Archetype, entity: Entity) void {
     _ = self.entities.swapRemove(index);
 }
 
+pub fn moveEntity(self: *Archetype, gpa: std.mem.Allocator, dst: *Archetype, entity: Entity) !usize {
+    const eid = self.findEntity(entity).?;
+    try dst.entities.append(gpa, entity);
+
+    for (dst.components.items) |*component| {
+        const cid = self.getTypeIdLocation(component.desc.id);
+        if (cid) |i| {
+            try component.appendRaw(gpa, self.components.items[i].getSingleRaw(eid));
+        } else {
+            try component.appendEmpty(gpa);
+        }
+    }
+    for (self.components.items) |*component| {
+        component.swapRemove(eid);
+    }
+    _ = self.entities.swapRemove(eid);
+    return dst.entities.items.len - 1;
+}
+
 pub fn getTypeIdLocation(self: *const Archetype, id: ecs.TypeId) ?usize {
     for (self.components.items, 0..) |c, i| {
         if (c.desc.id == id) {

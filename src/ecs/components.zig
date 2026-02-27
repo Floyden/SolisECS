@@ -43,6 +43,7 @@ pub const List = struct {
     }
 
     pub fn appendRaw(self: *List, allocator: std.mem.Allocator, component: []const u8) !void {
+        std.debug.assert(component.len == self.desc.size);
         try self.data.appendSlice(allocator, component);
     }
 

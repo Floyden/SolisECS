@@ -129,7 +129,6 @@ pub fn getMut(self: *const Storage, comptime T: type, entity: Entity) ?*T {
 pub fn removeComponent(self: *Storage, gpa: Allocator, entity: Entity, comptime T: type) !void {
     // Find Archetype of the Entity
     const location = self.findLocation(entity) orelse return error.EntityNotFound;
-    const entityIdx = location.index;
     var source = location.archetype;
 
     // Find new destination
@@ -159,14 +158,7 @@ pub fn removeComponent(self: *Storage, gpa: Allocator, entity: Entity, comptime 
         destination = dest;
     }
 
-    // Move entity
-    try destination.?.entities.append(gpa, entity);
-
-    for (destination.?.components.items) |*component| {
-        const index = source.getTypeIdLocation(component.desc.id);
-        try component.appendRaw(gpa, source.components.items[index.?].getSingleRaw(entityIdx));
-    }
-    source.removeEntity(entity);
+    _ = try source.moveEntity(gpa, destination.?, entity);
     try self.entity_map.put(gpa, entity, destination.?);
 }
 
@@ -212,19 +204,10 @@ pub fn setComponents(self: *Storage, gpa: Allocator, entity: Entity, comptime T:
     }
 
     // Move entity
-    try destination.?.entities.append(gpa, entity);
+    const new_index = try source.moveEntity(gpa, destination.?, entity);
+    const component_ptr: *T = &destination.?.getComponentsMut(T).?[new_index];
+    component_ptr.* = arg;
 
-    var component_ptr: *T = undefined;
-    for (destination.?.components.items) |*component| {
-        const index = source.getTypeIdLocation(component.desc.id);
-        if (index) |i| {
-            try component.appendRaw(gpa, source.components.items[i].getSingleRaw(entityIdx));
-        } else {
-            try component.append(gpa, T, arg);
-            component_ptr = &component.getMut(T)[component.count() - 1];
-        }
-    }
-    source.removeEntity(entity);
     try self.entity_map.put(gpa, entity, destination.?);
 
     return component_ptr;
