@@ -100,6 +100,7 @@ pub fn run_pipeline(world: *World) !void {
             }
         }
     }
+    world.commands.execute(world);
 }
 
 var startup_executed = [2]bool{ false, false };
