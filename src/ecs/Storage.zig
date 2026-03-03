@@ -49,6 +49,7 @@ pub fn deinit(self: *Storage, gpa: Allocator) void {
         list.deinit(gpa);
         gpa.destroy(list);
     }
+    self.marked.deinit(gpa);
     self.archetypes.deinit(gpa);
     self.entity_map.deinit(gpa);
 }
@@ -279,22 +280,21 @@ test "Remove Component directly" {
     try std.testing.expect(storage.get(Position, e) == null);
 }
 
-// TODO: Not yet implemented
-// test "Remove Entity Mark/Sweep" {
-//     const gpa = std.testing.allocator;
-//     var storage = try Storage.init(gpa);
-//     defer storage.deinit(gpa);
-//
-//     const e = try storage.addEntity(gpa, Entity{ .id = 42 });
-//     _ = try storage.setComponents(gpa, e, Position, .{ .x = 0, .y = 0 });
-//
-//     try std.testing.expect(storage.get(Position, e) != null);
-//
-//     storage.markEntity(e);
-//     storage.removeMarked();
-//
-//     try std.testing.expect(storage.get(Position, e) == null);
-// }
+test "Remove Entity Mark/Sweep" {
+    const gpa = std.testing.allocator;
+    var storage = try Storage.init(gpa);
+    defer storage.deinit(gpa);
+
+    const e = try storage.addEntity(gpa, Entity{ .id = 42 });
+    _ = try storage.setComponents(gpa, e, Position, .{ .x = 0, .y = 0 });
+
+    try std.testing.expect(storage.get(Position, e) != null);
+
+    try storage.markEntity(gpa, e);
+    storage.removeMarked(gpa);
+
+    try std.testing.expect(storage.get(Position, e) == null);
+}
 
 test "Remove Entity Directly" {
     const gpa = std.testing.allocator;

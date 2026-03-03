@@ -37,6 +37,7 @@ pub fn init(allocator: Allocator) !World {
 }
 
 pub fn deinit(self: *World) void {
+    self.commands.deinit(self.allocator);
     self.storage.deinit(self.allocator);
     self.pairStorage.deinit(self.allocator);
     self.components.deinit(self.allocator);

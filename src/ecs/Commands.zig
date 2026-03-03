@@ -57,9 +57,9 @@ fn SpawnCommand(ComponentT: type) type {
         components: ComponentT,
         fn spawnTask(cmd: *const Command, world: *ecs.World) void {
             const entity = world.create(world.allocator) catch @panic("Entity Creation failed");
-            if (@as(?*SpawnCommandT, @ptrCast(cmd.ctx))) |self| {
+            if (@as(?*SpawnCommandT, @ptrCast(@alignCast(cmd.ctx)))) |self| {
                 inline for (self.components) |component| {
-                    world.set(entity, @TypeOf(component), component) catch @panic("Failed to set components");
+                    _ = world.set(entity, @TypeOf(component), component) catch @panic("Failed to set components");
                 }
                 world.allocator.destroy(self);
             }
