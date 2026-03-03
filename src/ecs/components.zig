@@ -12,7 +12,7 @@ pub const List = struct {
 
     pub fn deinit(self: *List, allocator: std.mem.Allocator) void {
         if (self.desc.deinit) |deinit_ptr_raw| {
-            const deinit_ptr: *const fn (*anyopaque, std.mem.Allocator) void = @ptrCast(deinit_ptr_raw);
+            const deinit_ptr: *const fn (*anyopaque, std.mem.Allocator) void = @ptrCast(@alignCast(deinit_ptr_raw));
             var i: usize = 0;
             while (i < self.data.items.len) : (i += self.desc.size) {
                 deinit_ptr(&self.data.items[i], allocator);
@@ -68,7 +68,7 @@ pub const List = struct {
 
     pub fn deinitComponent(self: *List, gpa: std.mem.Allocator, index: usize) void {
         if (self.desc.deinit) |deinit_ptr| {
-            const deinit_fn: *const fn (*anyopaque, std.mem.Allocator) void = @ptrCast(deinit_ptr);
+            const deinit_fn: *const fn (*anyopaque, std.mem.Allocator) void = @ptrCast(@alignCast(deinit_ptr));
             deinit_fn(@ptrCast(self.getSingleRaw(index).ptr), gpa);
         }
     }
