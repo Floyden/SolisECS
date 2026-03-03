@@ -11,6 +11,21 @@ pub fn build(b: *std.Build) void {
     });
     root.addImport("solis_ecs", root);
 
+    const lib = b.addLibrary(.{
+        .name = "SolisECS",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/export.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "solis_ecs", .module = root },
+            },
+        }),
+        .linkage = .static,
+    });
+    b.installArtifact(lib);
+
     const exe = b.addExecutable(.{
         .name = "SolisECS",
         .root_module = b.createModule(.{
