@@ -77,9 +77,19 @@ pub fn traverse(self: *const World, desc: ecs.TraverseDesc) !ecs.PairStorage.Tra
     return self.pairStorage.traverse(self.allocator, desc);
 }
 
-pub fn create(self: *World, allocator: Allocator) !Entity {
+pub fn createEmpty(self: *World, allocator: Allocator) !Entity {
     defer self.nextEntity.id += 1;
     return self.storage.addEntity(allocator, self.nextEntity);
+}
+
+pub fn create(self: *World, allocator: Allocator, components: anytype) !Entity {
+    const entity = try self.createEmpty(allocator);
+    errdefer self.storage.removeEntity(allocator, entity);
+
+    inline for (components) |component| {
+        _ = try self.set(entity, @TypeOf(component), component);
+    }
+    return entity;
 }
 
 /// Insert an existing entity into the world. Used for internal entities.
@@ -129,7 +139,7 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
     const tuple = &ctx.params;
     ctx.callback = system;
 
-    const system_entity = try self.create(gpa);
+    const system_entity = try self.createEmpty(gpa);
     const params = system_info.@"fn".params;
     inline for (params, 0..) |param, i| {
         const field_name = comptime std.fmt.comptimePrint("{}", .{i});
