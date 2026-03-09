@@ -56,13 +56,12 @@ fn SpawnCommand(ComponentT: type) type {
 
         components: ComponentT,
         fn spawnTask(cmd: *const Command, world: *ecs.World) void {
-            const entity = world.create(world.allocator) catch @panic("Entity Creation failed");
             if (@as(?*SpawnCommandT, @ptrCast(@alignCast(cmd.ctx)))) |self| {
-                inline for (self.components) |component| {
-                    _ = world.set(entity, @TypeOf(component), component) catch @panic("Failed to set components");
-                }
+                _ = world.create(world.allocator, self.components) catch @panic("Entity Creation failed");
                 world.allocator.destroy(self);
+                return;
             }
+            _ = world.createEmpty(world.allocator) catch @panic("Entity Creation failed");
         }
 
         fn createCommand(gpa: std.mem.Allocator, components: ComponentT) !Command {
