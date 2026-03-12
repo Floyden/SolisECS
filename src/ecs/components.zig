@@ -4,7 +4,7 @@ const ArrayList = std.ArrayList;
 
 pub const List = struct {
     desc: Description,
-    data: ArrayList(u8),
+    data: std.ArrayListAligned(u8, std.mem.Alignment.@"64"),
 
     pub fn init(desc: Description) List {
         return List{ .desc = desc, .data = .empty };
