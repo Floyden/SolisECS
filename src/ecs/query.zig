@@ -80,8 +80,12 @@ pub fn Iter(comptime Q: anytype) type {
         pub fn next(self: *Self) ?ComponentBinding {
             const archetypes = self.query.archetypes.items;
             while (archetypes.len > self.archetype) {
-                self.createBinding();
                 defer self.archetype += 1;
+                const archetype: *ecs.Archetype = self.query.archetypes.items[self.archetype];
+                if (archetype.entities.items.len == 0)
+                    continue;
+
+                self.createBinding();
                 return self.binding;
             }
             self.entities = null;
