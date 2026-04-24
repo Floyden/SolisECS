@@ -7,12 +7,24 @@ const Allocator = std.mem.Allocator;
 
 const Storage = @This();
 
+const EntityEntry = struct {
+    archetype: *Archetype,
+    index: usize,
+
+    pub fn create(at: *Archetype, idx: usize) EntityEntry {
+        return .{
+            .archetype = at,
+            .index = idx,
+        };
+    }
+};
+
 // TODO: Figure out how to store stable pointers
 archetypes: std.ArrayList(*Archetype),
 globals: *Archetype,
 marked: std.ArrayList(Entity), // marked for removal
 
-entity_map: std.AutoArrayHashMapUnmanaged(Entity, *Archetype),
+entity_map: std.AutoArrayHashMapUnmanaged(Entity, EntityEntry),
 
 pub fn init(allocator: Allocator) !Storage {
     var archetypes: std.ArrayList(*Archetype) = .empty;
@@ -30,7 +42,7 @@ pub fn init(allocator: Allocator) !Storage {
         .archetypes = archetypes,
         .globals = globals_ptr,
         .marked = .empty,
-        .entity_map = try .init(allocator, &[_]Entity{.globals}, &[_]*Archetype{globals_ptr}),
+        .entity_map = try .init(allocator, &[_]Entity{.globals}, &[_]EntityEntry{.create(globals_ptr, 0)}),
     };
 }
 
@@ -41,8 +53,8 @@ pub fn deinit(self: *Storage, gpa: Allocator) void {
     @memcpy(keys, self.entity_map.keys());
     std.sort.block(Entity, keys, {}, Entity.desc);
     for (keys) |entity| {
-        const at = self.entity_map.get(entity) orelse continue;
-        at.removeEntity(gpa, entity);
+        const entry = self.entity_map.get(entity) orelse continue;
+        entry.archetype.removeEntity(gpa, entity);
     }
 
     for (self.archetypes.items) |list| {
@@ -57,7 +69,7 @@ pub fn deinit(self: *Storage, gpa: Allocator) void {
 pub fn addEntity(self: *Storage, allocator: std.mem.Allocator, entity: Entity) !Entity {
     // Store entity in Archetype without components
     try self.archetypes.items[0].addEntity(allocator, entity);
-    try self.entity_map.put(allocator, entity, self.archetypes.items[0]);
+    try self.entity_map.put(allocator, entity, .{ .archetype = self.archetypes.items[0], .index = self.archetypes.items[0].count() - 1 });
     return entity;
 }
 
@@ -73,17 +85,15 @@ pub fn removeMarked(self: *Storage, gpa: std.mem.Allocator) void {
 }
 
 pub fn removeEntity(self: *Storage, gpa: std.mem.Allocator, entity: Entity) void {
-    const at = self.entity_map.get(entity) orelse return;
-    at.removeEntity(gpa, entity);
+    const entry = self.entity_map.get(entity) orelse return;
+    entry.archetype.removeEntity(gpa, entity);
     _ = self.entity_map.swapRemove(entity);
 }
 
-fn findLocation(self: *const Storage, entity: Entity) ?struct { index: usize, archetype: *Archetype } {
+fn findLocation(self: *const Storage, entity: Entity) ?EntityEntry {
     const at = self.entity_map.get(entity) orelse return null;
-    if (at.findEntity(entity)) |value| {
-        return .{ .index = value, .archetype = at };
-    }
-    return null;
+    std.debug.assert(at.archetype.entities.items[at.index].id == entity.id);
+    return at;
 }
 
 pub fn setGlobal(self: *Storage, gpa: Allocator, comptime T: type, arg: T) !*T {
@@ -172,8 +182,13 @@ pub fn removeComponent(self: *Storage, gpa: Allocator, entity: Entity, comptime 
         destination = dest;
     }
 
-    _ = try source.moveEntity(gpa, destination.?, entity);
-    try self.entity_map.put(gpa, entity, destination.?);
+    const new_index = try source.moveEntity(gpa, destination.?, entity);
+    try self.entity_map.put(gpa, entity, .create(destination.?, new_index));
+
+    // we use swap remove in moveEntity, update the swapped entity
+    if (source.entities.items.len > 0 and location.index < source.entities.items.len) {
+        try self.entity_map.put(gpa, source.entities.items[location.index], .create(source, location.index));
+    }
 }
 
 pub fn setComponents(self: *Storage, gpa: Allocator, entity: Entity, comptime T: type, arg: T) !*T {
@@ -222,7 +237,11 @@ pub fn setComponents(self: *Storage, gpa: Allocator, entity: Entity, comptime T:
     const component_ptr: *T = &destination.?.getComponentsMut(T).?[new_index];
     component_ptr.* = arg;
 
-    try self.entity_map.put(gpa, entity, destination.?);
+    try self.entity_map.put(gpa, entity, .create(destination.?, new_index));
+    // we use swap remove in moveEntity, update the swapped entity
+    if (source.entities.items.len > 0 and location.index < source.entities.items.len) {
+        try self.entity_map.put(gpa, source.entities.items[location.index], .create(source, location.index));
+    }
 
     return component_ptr;
 }
