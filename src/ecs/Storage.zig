@@ -75,6 +75,7 @@ pub fn removeMarked(self: *Storage, gpa: std.mem.Allocator) void {
 pub fn removeEntity(self: *Storage, gpa: std.mem.Allocator, entity: Entity) void {
     const at = self.entity_map.get(entity) orelse return;
     at.removeEntity(gpa, entity);
+    _ = self.entity_map.swapRemove(entity);
 }
 
 fn findLocation(self: *const Storage, entity: Entity) ?struct { index: usize, archetype: *Archetype } {
@@ -92,7 +93,7 @@ pub fn setGlobal(self: *Storage, gpa: Allocator, comptime T: type, arg: T) !*T {
         idx_opt = self.globals.getTypeLocation(T);
     }
 
-    var component_list = self.globals.components.items[idx_opt.?];
+    var component_list = &self.globals.components.items[idx_opt.?];
     std.debug.assert(component_list.data.items.len == @sizeOf(T));
     component_list.getMut(T)[0] = arg;
     return &component_list.getMut(T)[0];
@@ -155,9 +156,11 @@ pub fn removeComponent(self: *Storage, gpa: Allocator, entity: Entity, comptime 
     if (destination == null) {
         var types = try gpa.alloc(ecs.ComponentDesc, source.components.items.len - 1);
         defer gpa.free(types);
-        for (source.components.items, 0..) |list, i| {
+        var i: usize = 0;
+        for (source.components.items) |list| {
             if (list.desc.id == ecs.typeId(T)) continue;
             types.ptr[i] = list.desc;
+            i += 1;
         }
 
         const new_archetype = try gpa.create(Archetype);
