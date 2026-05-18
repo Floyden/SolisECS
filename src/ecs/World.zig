@@ -136,6 +136,16 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
         fn invoke(self_ctx: *const @This()) void {
             @call(.auto, self_ctx.callback, self_ctx.params);
         }
+
+        fn prepare(self_ctx: *@This(), world: *World) void {
+            inline for (&self_ctx.params) |*param| {
+                const T = @TypeOf(param.*);
+                const Base = if (@typeInfo(T) == .pointer) std.meta.Child(T) else T;
+                if (comptime @hasDecl(Base, "prepare")) {
+                    param.prepare(world);
+                }
+            }
+        }
     };
     const ctx: *Context = try gpa.create(Context);
     const tuple = &ctx.params;
@@ -145,10 +155,10 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
     const params = system_info.@"fn".params;
     inline for (params, 0..) |param, i| {
         const T = param.type.?;
-        const TVal = if (@typeInfo(T) == .pointer) @typeInfo(T).pointer.child else T;
+        const Base = if (@typeInfo(T) == .pointer) std.meta.Child(T) else T;
         const field_name = comptime std.fmt.comptimePrint("{}", .{i});
 
-        if (comptime @hasDecl(TVal, "PointerOnlyParameter") and TVal.PointerOnlyParameter and TVal == T) {
+        if (comptime @hasDecl(Base, "PointerOnlyParameter") and Base.PointerOnlyParameter and Base == T) {
             const err_msg = comptime std.fmt.comptimePrint("Found {} as pointer only system parameter, use *{} instead", .{ T, T });
             @compileError(err_msg);
         }
@@ -168,6 +178,7 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
     const system_component = ecs.System{
         .callback = @ptrCast(&Context.invoke),
         .deinit_cb = @ptrCast(&Context.deinit),
+        .prepare_cb = @ptrCast(&Context.prepare),
         .context = ctx,
     };
 

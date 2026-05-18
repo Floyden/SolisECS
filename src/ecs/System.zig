@@ -8,7 +8,8 @@ pub const SystemDesc = struct {
 
 pub const System = struct {
     callback: *const fn (*anyopaque) void,
-    deinit_cb: *const fn (*anyopaque, gpa: std.mem.Allocator) void,
+    deinit_cb: *const fn (*anyopaque, std.mem.Allocator) void,
+    prepare_cb: *const fn (*anyopaque, *ecs.World) void,
     context: *anyopaque,
     last_frame: u64 = 0,
 
@@ -18,5 +19,9 @@ pub const System = struct {
 
     pub fn invoke(self: System) void {
         @call(.auto, self.callback, .{self.context});
+    }
+
+    pub fn prepare(self: System, world: *ecs.World) void {
+        @call(.auto, self.prepare_cb, .{ self.context, world });
     }
 };

@@ -95,6 +95,7 @@ pub fn run_pipeline(world: *World) !void {
         while (try sys_iter.next()) |node| {
             const system: *ecs.System = &node.@"0"[0];
             if (system.last_frame < world.frame) {
+                system.prepare(world);
                 system.callback(system.context);
                 system.last_frame = world.frame;
             }
