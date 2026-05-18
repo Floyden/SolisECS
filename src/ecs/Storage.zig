@@ -109,7 +109,15 @@ pub fn setGlobal(self: *Storage, gpa: Allocator, comptime T: type, arg: T) !*T {
     return &component_list.getMut(T)[0];
 }
 
-pub fn getGlobal(self: *const Storage, comptime T: type) ?*T {
+pub fn getGlobal(self: *const Storage, comptime T: type) ?*const T {
+    const idx_opt = self.globals.getTypeLocation(T);
+    if (idx_opt) |idx| {
+        return &self.globals.components.items[idx].get(T)[0];
+    }
+    return null;
+}
+
+pub fn getGlobalMut(self: *const Storage, comptime T: type) ?*T {
     const idx_opt = self.globals.getTypeLocation(T);
     if (idx_opt) |idx| {
         return &self.globals.components.items[idx].getMut(T)[0];
@@ -354,6 +362,24 @@ test "Mutate Global" {
 
     const s = storage.getGlobal(Gravity) orelse return error.TestExpectedEqual;
     try std.testing.expectEqual(98.1, s.g);
+}
+
+test "Multiple Globals" {
+    const gpa = std.testing.allocator;
+    var storage = try Storage.init(gpa);
+    defer storage.deinit(gpa);
+
+    const Time = struct { t: u64 };
+    const s = try storage.setGlobal(gpa, Gravity, .{ .g = 9.81 });
+    const t = try storage.setGlobal(gpa, Time, .{ .t = 1 });
+
+    try std.testing.expectEqual(9.81, s.g);
+    try std.testing.expectEqual(1, t.t);
+
+    const s2 = storage.getGlobal(Gravity) orelse return error.TestExpectedEqual;
+    try std.testing.expect(s == s2);
+    const t2 = storage.getGlobal(Time) orelse return error.TestExpectedEqual;
+    try std.testing.expect(t == t2);
 }
 
 test "Multiple Entities" {
