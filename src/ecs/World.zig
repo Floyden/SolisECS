@@ -11,6 +11,8 @@ const QueryIter = ecs.QueryIter;
 
 const World = @This();
 
+const PointerOnlyParameter: bool = true;
+
 allocator: Allocator,
 commands: ecs.Commands,
 components: std.AutoHashMapUnmanaged(ComponentDesc, void),
@@ -142,12 +144,18 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
     const system_entity = try self.createEmpty(gpa);
     const params = system_info.@"fn".params;
     inline for (params, 0..) |param, i| {
+        const T = param.type.?;
+        const TVal = if (@typeInfo(T) == .pointer) @typeInfo(T).pointer.child else T;
         const field_name = comptime std.fmt.comptimePrint("{}", .{i});
-        switch (param.type.?) {
+
+        if (comptime @hasDecl(TVal, "PointerOnlyParameter") and TVal.PointerOnlyParameter and TVal == T) {
+            const err_msg = comptime std.fmt.comptimePrint("Found {} as pointer only system parameter, use *{} instead", .{ T, T });
+            @compileError(err_msg);
+        }
+
+        switch (T) {
             std.mem.Allocator => @field(tuple.*, field_name) = self.allocator,
-            ecs.Commands, *const ecs.Commands => @compileError("Found const Commands as system parameter, use *Commands"),
             *ecs.Commands => @field(tuple.*, field_name) = &self.commands,
-            World => @compileError("World as parameter not supported, use *World or *const World"),
             *World, *const World => {
                 @field(tuple.*, field_name) = self;
             },

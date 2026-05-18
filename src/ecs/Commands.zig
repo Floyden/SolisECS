@@ -10,6 +10,8 @@ const Command = struct {
     entity: ecs.Entity = .none,
 };
 
+const PointerOnlyParameter: bool = true;
+
 buffer: std.ArrayList(Command),
 
 pub fn init() Self {
