@@ -84,14 +84,40 @@ pub fn createEmpty(self: *World, allocator: Allocator) !Entity {
     return self.storage.addEntity(allocator, self.nextEntity);
 }
 
-pub fn create(self: *World, allocator: Allocator, components: anytype) !Entity {
-    const entity = try self.createEmpty(allocator);
-    errdefer self.storage.removeEntity(allocator, entity);
-
-    inline for (components) |component| {
-        _ = try self.set(entity, @TypeOf(component), component);
-    }
+/// Wrapper around calling `createEmpty` and `add`
+pub fn create(self: *World, gpa: Allocator, components: anytype) !Entity {
+    const entity = try self.createEmpty(gpa);
+    errdefer self.storage.removeEntity(gpa, entity);
+    try self.add(gpa, entity, components);
     return entity;
+}
+
+/// Add a component or a tuple of components to the entity
+pub fn add(self: *World, gpa: Allocator, entity: Entity, components: anytype) !void {
+    const ComponentT = @TypeOf(components);
+    const component_desc = @typeInfo(ComponentT);
+    if (component_desc != .@"struct") return error.ComponentType;
+    // TODO: [Slow] The current implementation might cause the entity to be moved often between archetypes.
+
+    if (component_desc.@"struct".is_tuple) {
+        inline for (components) |component| {
+            _ = try self.add(gpa, entity, component);
+        }
+        return;
+    }
+
+    _ = try self.set(entity, ComponentT, components);
+    if (@hasDecl(ComponentT, "Requires")) {
+        inline for (ComponentT.Requires) |Req| {
+            if (!self.has(entity, Req)) {
+                if (@hasDecl(Req, "default")) {
+                    try self.add(gpa, entity, Req.default);
+                } else {
+                    try self.add(gpa, entity, Req{});
+                }
+            }
+        }
+    }
 }
 
 /// Insert an existing entity into the world. Used for internal entities.
@@ -99,6 +125,7 @@ pub fn insertEntity(self: *World, gpa: Allocator, entity: Entity) !void {
     _ = try self.storage.addEntity(gpa, entity);
 }
 
+/// Set the component to the given value. Will add the component to the entity if not present.
 pub fn set(self: *World, entity: Entity, comptime T: type, arg: T) !*T {
     return try self.storage.setComponents(self.allocator, entity, T, arg);
 }
@@ -109,6 +136,10 @@ pub fn get(self: *World, entity: Entity, comptime T: type) ?*const T {
 
 pub fn getMut(self: *World, entity: Entity, comptime T: type) ?*T {
     return self.storage.getMut(T, entity);
+}
+
+pub fn has(self: *World, entity: Entity, comptime T: type) bool {
+    return self.get(entity, T) != null;
 }
 
 pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.SystemDesc) !void {
@@ -190,4 +221,25 @@ pub fn step(self: *World) !void {
     self.frame += 1;
     try ecs.Schedule.run_pipeline(self);
     self.storage.removeMarked(self.allocator);
+}
+
+// ------ Tests ------
+
+const Foo = struct { x: u32 = 4 };
+const Bar = struct {
+    const Requires = .{Foo};
+    y: u32,
+};
+
+test "create" {
+    const gpa = std.testing.allocator;
+    var world = try World.init(gpa);
+    defer world.deinit();
+
+    const e1 = try world.create(gpa, Foo{ .x = 1 });
+    try std.testing.expect(world.get(e1, Foo).?.x == 1);
+
+    const e2 = try world.create(gpa, Bar{ .y = 2 });
+    try std.testing.expect(world.get(e2, Bar).?.y == 2);
+    try std.testing.expect(world.get(e2, Foo).?.x == 4);
 }
