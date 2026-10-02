@@ -60,10 +60,8 @@ pub fn run_startup(world: *World) !void {
 
         while (try sys_iter.next()) |node| {
             const system: *ecs.System = &node.@"0"[0];
-            if (system.last_frame < world.frame) {
-                system.callback(system.context);
-                system.last_frame = world.frame;
-            }
+            system.last_frame = world.frame;
+            system.callback(system.context);
         }
     }
 
@@ -71,7 +69,7 @@ pub fn run_startup(world: *World) !void {
 }
 
 pub fn run_pipeline(world: *World) !void {
-    if (world.frame == 0)
+    if (world.frame == 1)
         try run_startup(world);
 
     var query = try Query(.{*ecs.System}, .{}).init(world.allocator, world, .none);
@@ -118,12 +116,11 @@ test "Startup" {
     const gpa = std.testing.allocator;
     var world = try World.init(gpa);
     defer world.deinit();
-    world.frame = 1;
 
     try world.addSystem(gpa, Systems.test_system1, .{ .stage = .stage_startup });
     try world.addSystem(gpa, Systems.test_system2, .{ .stage = .stage_startup });
 
-    try run_startup(&world);
+    try world.step();
 
     try std.testing.expect(startup_executed[0]);
     try std.testing.expect(startup_executed[1]);
@@ -152,7 +149,6 @@ test "Systems" {
     const gpa = std.testing.allocator;
     var world = try World.init(gpa);
     defer world.deinit();
-    world.frame = 1;
 
     try world.addSystem(gpa, Systems.test_system_start, .{ .stage = .stage_frame_start });
     try world.addSystem(gpa, Systems.test_system_pre_update, .{ .stage = .stage_pre_update });
@@ -160,7 +156,7 @@ test "Systems" {
     try world.addSystem(gpa, Systems.test_system_post_update, .{ .stage = .stage_post_update });
     try world.addSystem(gpa, Systems.test_system_end, .{ .stage = .stage_frame_end });
 
-    try run_pipeline(&world);
+    try world.step();
 
     try std.testing.expect(systems_executed[0]);
     try std.testing.expect(systems_executed[1]);

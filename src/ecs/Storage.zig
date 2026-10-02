@@ -96,6 +96,8 @@ fn findLocation(self: *const Storage, entity: Entity) ?EntityEntry {
     return at;
 }
 
+// TODO: Instead of having a component_list for every global, use one list of globals which stores a pointer to the actual values.
+// This will allow for stable global pointers.
 pub fn setGlobal(self: *Storage, gpa: Allocator, comptime T: type, arg: T) !*T {
     var idx_opt = self.globals.getTypeLocation(T);
     if (idx_opt == null) {

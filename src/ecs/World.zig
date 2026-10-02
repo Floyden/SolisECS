@@ -219,6 +219,7 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
 
 pub fn step(self: *World) !void {
     self.frame += 1;
+    // TODO: make schedule an actual member of world. Why is it like this?
     try ecs.Schedule.run_pipeline(self);
     self.storage.removeMarked(self.allocator);
 }

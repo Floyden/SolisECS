@@ -11,7 +11,7 @@ pub const System = struct {
     deinit_cb: *const fn (*anyopaque, std.mem.Allocator) void,
     prepare_cb: *const fn (*anyopaque, *ecs.World) void,
     context: *anyopaque,
-    last_frame: u64 = 0,
+    last_frame: usize = 0,
 
     pub fn deinit(self: *System, gpa: std.mem.Allocator) void {
         @call(.auto, self.deinit_cb, .{ self.context, gpa });
