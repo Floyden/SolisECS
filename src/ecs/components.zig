@@ -14,8 +14,8 @@ pub const List = struct {
         if (self.desc.deinit) |deinit_ptr_raw| {
             const deinit_ptr: *const fn (*anyopaque, std.mem.Allocator) void = @ptrCast(@alignCast(deinit_ptr_raw));
             var i: usize = 0;
-            while (i < self.data.items.len) : (i += self.desc.size) {
-                deinit_ptr(&self.data.items[i], allocator);
+            while (i < self.count()) : (i += 1) {
+                deinit_ptr(self.getSingleRaw(i).ptr, allocator);
             }
         }
         self.data.deinit(allocator);
@@ -44,6 +44,10 @@ pub const List = struct {
 
     pub fn appendRaw(self: *List, allocator: std.mem.Allocator, component: []const u8) !void {
         std.debug.assert(component.len == self.desc.size);
+        if (self.desc.size == 0) {
+            self.data.items.len += 1;
+            return;
+        }
         try self.data.appendSlice(allocator, component);
     }
 

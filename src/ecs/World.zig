@@ -96,7 +96,10 @@ pub fn create(self: *World, gpa: Allocator, components: anytype) !Entity {
 pub fn add(self: *World, gpa: Allocator, entity: Entity, components: anytype) !void {
     const ComponentT = @TypeOf(components);
     const component_desc = @typeInfo(ComponentT);
-    if (component_desc != .@"struct") return error.ComponentType;
+    if (component_desc != .@"struct") {
+        std.log.err("Trying to add invalid component: {}", .{ComponentT});
+        return error.ComponentType;
+    }
     // TODO: [Slow] The current implementation might cause the entity to be moved often between archetypes.
 
     if (component_desc.@"struct".is_tuple) {
