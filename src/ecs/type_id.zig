@@ -5,7 +5,7 @@ pub fn to_usize(self: TypeId) usize {
 }
 
 pub const TypeId = *const struct {
-    name: [*]const u8,
+    name: [:0]const u8,
 };
 
 pub inline fn typeId(comptime T: type) TypeId {
