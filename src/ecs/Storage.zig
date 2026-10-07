@@ -48,9 +48,13 @@ pub fn init(allocator: Allocator) !Storage {
 
 pub fn deinit(self: *Storage, gpa: Allocator) void {
     for (self.archetypes.items) |list| {
+        if (list == self.globals) continue;
         list.deinit(gpa);
         gpa.destroy(list);
     }
+    self.globals.deinit(gpa);
+    gpa.destroy(self.globals);
+
     self.marked.deinit(gpa);
     self.archetypes.deinit(gpa);
     self.entity_map.deinit(gpa);
