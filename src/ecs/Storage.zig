@@ -47,16 +47,6 @@ pub fn init(allocator: Allocator) !Storage {
 }
 
 pub fn deinit(self: *Storage, gpa: Allocator) void {
-    const keys = gpa.alloc(Entity, self.entity_map.count()) catch @panic("OOM");
-    defer gpa.free(keys);
-
-    @memcpy(keys, self.entity_map.keys());
-    std.sort.block(Entity, keys, {}, Entity.desc);
-    for (keys) |entity| {
-        const entry = self.entity_map.get(entity) orelse continue;
-        entry.archetype.removeEntity(gpa, entity);
-    }
-
     for (self.archetypes.items) |list| {
         list.deinit(gpa);
         gpa.destroy(list);

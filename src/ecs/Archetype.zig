@@ -30,11 +30,11 @@ fn typeLt(_: void, a: ComponentList, b: ComponentList) bool {
     return @intFromPtr(a.desc.id) < @intFromPtr(b.desc.id);
 }
 
-pub fn init(allocator: std.mem.Allocator, components: []const ComponentDesc) !Archetype {
+pub fn init(gpa: std.mem.Allocator, components: []const ComponentDesc) !Archetype {
     var componentVec: ArrayList(ComponentList) = .empty;
 
     for (components) |component| {
-        try componentVec.append(allocator, ComponentList.init(component));
+        try componentVec.append(gpa, ComponentList.init(component));
     }
 
     // Number of elements should be rather small, perfect for insertion sort
@@ -48,20 +48,27 @@ pub fn init(allocator: std.mem.Allocator, components: []const ComponentDesc) !Ar
     };
 }
 
-pub fn deinit(self: *Archetype, allocator: std.mem.Allocator) void {
-    self.entities.deinit(allocator);
+pub fn deinit(self: *Archetype, gpa: std.mem.Allocator) void {
+    self.entities.deinit(gpa);
     for (self.components.items) |*list| {
-        list.deinit(allocator);
+        list.deinit(gpa);
     }
-    self.components.deinit(allocator);
-    self.addTypeEdges.deinit(allocator);
-    self.removeTypeEdges.deinit(allocator);
+    self.components.deinit(gpa);
+    self.addTypeEdges.deinit(gpa);
+    self.removeTypeEdges.deinit(gpa);
 }
 
-pub fn addEntity(self: *Archetype, allocator: std.mem.Allocator, entity: Entity) !void {
-    try self.entities.append(allocator, entity);
+pub fn clearAndFree(self: *Archetype, gpa: std.mem.Allocator) void {
     for (self.components.items) |*list| {
-        try list.appendEmpty(allocator);
+        list.clearAndFree(gpa);
+    }
+    self.entities.clearAndFree(gpa);
+}
+
+pub fn addEntity(self: *Archetype, gpa: std.mem.Allocator, entity: Entity) !void {
+    try self.entities.append(gpa, entity);
+    for (self.components.items) |*list| {
+        try list.appendEmpty(gpa);
     }
 }
 
@@ -139,16 +146,16 @@ pub fn count(self: *const Archetype) usize {
 }
 
 /// Adds another component to the current archetype. The newly allocated components are not initialized
-pub fn expand(self: *Archetype, allocator: std.mem.Allocator, comptime T: type) !void {
+pub fn expand(self: *Archetype, gpa: std.mem.Allocator, comptime T: type) !void {
     var new_list = ComponentList.init(.get(T));
-    try new_list.allocate(allocator, T, self.entities.items.len);
+    try new_list.allocate(gpa, T, self.entities.items.len);
     for (self.components.items, 0..) |c, i| {
         if (@intFromPtr(c.desc.id) > @intFromPtr(new_list.desc.id)) {
-            try self.components.insert(allocator, i, new_list);
+            try self.components.insert(gpa, i, new_list);
             return;
         }
     }
-    try self.components.append(allocator, new_list);
+    try self.components.append(gpa, new_list);
 }
 
 //---- Tests -----

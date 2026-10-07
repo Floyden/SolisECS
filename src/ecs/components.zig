@@ -10,28 +10,33 @@ pub const List = struct {
         return List{ .desc = desc, .data = .empty };
     }
 
-    pub fn deinit(self: *List, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *List, gpa: std.mem.Allocator) void {
+        self.clearAndFree(gpa);
+        self.data.deinit(gpa);
+    }
+
+    pub fn clearAndFree(self: *List, gpa: std.mem.Allocator) void {
         if (self.desc.deinit) |deinit_ptr_raw| {
             const deinit_ptr: *const fn (*anyopaque, std.mem.Allocator) void = @ptrCast(@alignCast(deinit_ptr_raw));
             var i: usize = 0;
             while (i < self.count()) : (i += 1) {
-                deinit_ptr(self.getSingleRaw(i).ptr, allocator);
+                deinit_ptr(self.getSingleRaw(i).ptr, gpa);
             }
         }
-        self.data.deinit(allocator);
+        self.data.clearAndFree(gpa);
     }
 
-    pub fn allocate(self: *List, allocator: std.mem.Allocator, comptime T: type, n: usize) !void {
+    pub fn allocate(self: *List, gpa: std.mem.Allocator, comptime T: type, n: usize) !void {
         std.debug.assert(self.desc.id == ecs.typeId(T));
 
         if (comptime @sizeOf(T) == 0) {
             self.data.items.len += n;
         } else {
-            try self.data.appendNTimes(allocator, 0, @sizeOf(T) * n);
+            try self.data.appendNTimes(gpa, 0, @sizeOf(T) * n);
         }
     }
 
-    pub fn append(self: *List, allocator: std.mem.Allocator, comptime T: type, component: T) !void {
+    pub fn append(self: *List, gpa: std.mem.Allocator, comptime T: type, component: T) !void {
         std.debug.assert(self.desc.id == ecs.typeId(T));
         if (comptime @sizeOf(T) == 0) {
             self.data.items.len += 1;
@@ -39,24 +44,24 @@ pub const List = struct {
         }
 
         const data: [*]const u8 = @ptrCast(@alignCast(&component));
-        try self.data.appendSlice(allocator, data[0..@sizeOf(T)]);
+        try self.data.appendSlice(gpa, data[0..@sizeOf(T)]);
     }
 
-    pub fn appendRaw(self: *List, allocator: std.mem.Allocator, component: []const u8) !void {
+    pub fn appendRaw(self: *List, gpa: std.mem.Allocator, component: []const u8) !void {
         std.debug.assert(component.len == self.desc.size);
         if (self.desc.size == 0) {
             self.data.items.len += 1;
             return;
         }
-        try self.data.appendSlice(allocator, component);
+        try self.data.appendSlice(gpa, component);
     }
 
-    pub fn appendEmpty(self: *List, allocator: std.mem.Allocator) !void {
+    pub fn appendEmpty(self: *List, gpa: std.mem.Allocator) !void {
         if (self.desc.size == 0) {
             self.data.items.len += 1;
             return;
         }
-        try self.data.appendNTimes(allocator, 0, self.desc.size);
+        try self.data.appendNTimes(gpa, 0, self.desc.size);
     }
 
     pub fn swapRemove(self: *List, index: usize) void {
@@ -134,16 +139,16 @@ pub const Description = struct {
 // ----------- Test ----------------
 test "Basic" {
     const Position = struct { x: i32, y: i32, z: i32 };
-    const allocator = std.testing.allocator;
+    const gpa = std.testing.allocator;
 
     var list = List.init(Description.get(Position));
-    defer list.deinit(allocator);
+    defer list.deinit(gpa);
 
     const a = Position{ .x = 12, .y = -42, .z = 1 };
     const b = Position{ .x = 13, .y = -44, .z = 1 };
 
-    try list.append(allocator, Position, a);
-    try list.append(allocator, Position, b);
+    try list.append(gpa, Position, a);
+    try list.append(gpa, Position, b);
 
     var values = list.getMut(Position);
     try std.testing.expect(values.len == 2);
@@ -160,13 +165,13 @@ test "Basic" {
 
 test "Zero sized types" {
     const Tag = struct {};
-    const allocator = std.testing.allocator;
+    const gpa = std.testing.allocator;
 
     var list = List.init(Description.get(Tag));
-    defer list.deinit(allocator);
+    defer list.deinit(gpa);
 
-    try list.append(allocator, Tag, .{});
-    try list.append(allocator, Tag, .{});
+    try list.append(gpa, Tag, .{});
+    try list.append(gpa, Tag, .{});
 
     const values = list.getMut(Tag);
     try std.testing.expectEqual(2, values.len);
