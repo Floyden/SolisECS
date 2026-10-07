@@ -165,9 +165,19 @@ pub fn Query(components: anytype, filters: anytype) type {
         archetypes: std.ArrayList(*ecs.Archetype),
         world: *World,
 
-        pub fn init(gpa: std.mem.Allocator, world: *World, _: ecs.Entity) !Self {
+        pub fn init(_: std.mem.Allocator, world: *World, _: ecs.Entity) !Self {
             var res: Self = .{ .archetypes = .empty, .world = world };
-            outer: for (world.storage.archetypes.items) |archetype| {
+            res.prepare(world);
+            return res;
+        }
+
+        pub fn deinit(self: *Self, gpa: std.mem.Allocator) void {
+            self.archetypes.deinit(gpa);
+        }
+
+        pub fn prepare(self: *Self, world: *World) void {
+            self.archetypes.clearRetainingCapacity();
+            outer: for (self.world.storage.archetypes.items) |archetype| {
                 if (archetype.components.items.len < ComponentArray.len) continue;
 
                 // skip archetypes which do not contain the component
@@ -180,13 +190,8 @@ pub fn Query(components: anytype, filters: anytype) type {
                     }
                 }
 
-                try res.archetypes.append(gpa, archetype);
+                self.archetypes.append(world.allocator, archetype) catch @panic("OOM");
             }
-            return res;
-        }
-
-        pub fn deinit(self: *Self, gpa: std.mem.Allocator) void {
-            self.archetypes.deinit(gpa);
         }
 
         pub fn iter(self: *const Self) Iter(Self) {
