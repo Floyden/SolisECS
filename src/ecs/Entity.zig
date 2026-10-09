@@ -20,6 +20,7 @@ pub const stage_frame_end: Self = .{ .id = -105 };
 
 // Pairs
 pub const DependsOn = struct {};
+pub const InStage = struct {};
 
 pub fn asc(_: void, a: Self, b: Self) bool {
     return a.id < b.id;

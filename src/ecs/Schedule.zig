@@ -46,6 +46,7 @@ pub fn run_startup(world: *World) !void {
 
     var stage_iter = try world.traverse(ecs.TraverseDesc{
         .relation = ecs.typeId(Entity.DependsOn),
+        .reversed = true,
         .node = .stage_startup,
     });
     defer stage_iter.deinit();
@@ -54,7 +55,7 @@ pub fn run_startup(world: *World) !void {
         var sys_iter = try query.traverse(world.allocator, .{
             .reversed = true,
             .node = stage,
-            .relation = ecs.typeId(Entity.DependsOn),
+            .relation = ecs.typeId(Entity.InStage),
         });
         defer sys_iter.deinit();
 
@@ -78,6 +79,7 @@ pub fn run_pipeline(world: *World) !void {
     // TODO: stage_frame_start may not be the first stage of the system
     var stage_iter = try world.traverse(ecs.TraverseDesc{
         .relation = ecs.typeId(Entity.DependsOn),
+        .reversed = true,
         .node = .stage_frame_start,
     });
     defer stage_iter.deinit();
@@ -86,7 +88,7 @@ pub fn run_pipeline(world: *World) !void {
         var sys_iter = try query.traverse(world.allocator, .{
             .reversed = true,
             .node = stage,
-            .relation = ecs.typeId(Entity.DependsOn),
+            .relation = ecs.typeId(Entity.InStage),
         });
         defer sys_iter.deinit();
 

@@ -217,7 +217,7 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
     };
 
     _ = try self.set(system_entity, ecs.System, system_component);
-    try self.addPair(system_entity, Entity.DependsOn, desc.stage);
+    try self.addPair(system_entity, Entity.InStage, desc.stage);
 }
 
 pub fn step(self: *World) !void {
