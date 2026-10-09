@@ -177,7 +177,7 @@ pub fn Query(components: anytype, filters: anytype) type {
 
         pub fn prepare(self: *Self, world: *World) void {
             self.archetypes.clearRetainingCapacity();
-            outer: for (self.world.storage.archetypes.items) |archetype| {
+            outer: for (world.storage.archetypes.items) |archetype| {
                 if (archetype.components.items.len < ComponentArray.len) continue;
 
                 // skip archetypes which do not contain the component
