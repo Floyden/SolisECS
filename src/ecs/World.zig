@@ -145,7 +145,7 @@ pub fn has(self: *World, entity: Entity, comptime T: type) bool {
     return self.get(entity, T) != null;
 }
 
-pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.SystemDesc) !void {
+pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.SystemDesc) !Entity {
     const SystemType = @TypeOf(system);
     const system_info = @typeInfo(SystemType);
     if (system_info != .@"fn") @compileError("Only Functions supported in World.addSystem");
@@ -217,7 +217,14 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
     };
 
     _ = try self.set(system_entity, ecs.System, system_component);
-    try self.addPair(system_entity, Entity.InStage, desc.stage);
+    try self.addPair(system_entity, Entity.DependsOn, desc.stage);
+
+    for (desc.predecessors) |predecessor|
+        try self.addPair(system_entity, Entity.DependsOn, predecessor);
+    for (desc.successors) |successor|
+        try self.addPair(successor, Entity.DependsOn, system_entity);
+
+    return system_entity;
 }
 
 pub fn step(self: *World) !void {

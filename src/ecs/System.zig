@@ -1,13 +1,16 @@
 const ecs = @import("solis_ecs");
 const std = @import("std");
 
+const SystemFn = *const fn (*anyopaque) void;
+
 pub const SystemDesc = struct {
     stage: ecs.Entity = .stage_update,
-    // dependencies
+    predecessors: []const ecs.Entity = &.{}, // Systems which run before this system
+    successors: []const ecs.Entity = &.{}, // Systems which run after this system
 };
 
 pub const System = struct {
-    callback: *const fn (*anyopaque) void,
+    callback: SystemFn,
     deinit_cb: *const fn (*anyopaque, std.mem.Allocator) void,
     prepare_cb: *const fn (*anyopaque, *ecs.World) void,
     context: *anyopaque,

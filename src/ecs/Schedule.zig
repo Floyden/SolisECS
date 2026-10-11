@@ -92,16 +92,30 @@ pub fn run_pipeline(world: *World) !void {
         });
         defer sys_iter.deinit();
 
-        while (try sys_iter.next()) |node| {
-            const system: *ecs.System = &node.@"0"[0];
-            if (system.last_frame < world.frame) {
-                system.prepare(world);
-                system.callback(system.context);
-                system.last_frame = world.frame;
-            }
+        while (try sys_iter.next()) |_| {
+            try run_system(world, sys_iter.entity);
         }
     }
     world.commands.execute(world);
+}
+
+pub fn run_system(world: *World, entity: Entity) !void {
+    const system = world.getMut(entity, System) orelse return;
+    if (system.last_frame >= world.frame) return;
+
+    var deps = try world.traverse(.{
+        .node = entity,
+        .relation = ecs.typeId(Entity.DependsOn),
+    });
+    defer deps.deinit();
+
+    system.last_frame = world.frame;
+    while (try deps.next()) |dep| {
+        try run_system(world, dep);
+    }
+
+    system.prepare(world);
+    system.callback(system.context);
 }
 
 var startup_executed = [2]bool{ false, false };
@@ -119,8 +133,8 @@ test "Startup" {
     var world = try World.init(gpa);
     defer world.deinit();
 
-    try world.addSystem(gpa, Systems.test_system1, .{ .stage = .stage_startup });
-    try world.addSystem(gpa, Systems.test_system2, .{ .stage = .stage_startup });
+    _ = try world.addSystem(gpa, Systems.test_system1, .{ .stage = .stage_startup });
+    _ = try world.addSystem(gpa, Systems.test_system2, .{ .stage = .stage_startup });
 
     try world.step();
 
@@ -152,11 +166,11 @@ test "Systems" {
     var world = try World.init(gpa);
     defer world.deinit();
 
-    try world.addSystem(gpa, Systems.test_system_start, .{ .stage = .stage_frame_start });
-    try world.addSystem(gpa, Systems.test_system_pre_update, .{ .stage = .stage_pre_update });
-    try world.addSystem(gpa, Systems.test_system_update, .{ .stage = .stage_update });
-    try world.addSystem(gpa, Systems.test_system_post_update, .{ .stage = .stage_post_update });
-    try world.addSystem(gpa, Systems.test_system_end, .{ .stage = .stage_frame_end });
+    _ = try world.addSystem(gpa, Systems.test_system_start, .{ .stage = .stage_frame_start });
+    _ = try world.addSystem(gpa, Systems.test_system_pre_update, .{ .stage = .stage_pre_update });
+    _ = try world.addSystem(gpa, Systems.test_system_update, .{ .stage = .stage_update });
+    _ = try world.addSystem(gpa, Systems.test_system_post_update, .{ .stage = .stage_post_update });
+    _ = try world.addSystem(gpa, Systems.test_system_end, .{ .stage = .stage_frame_end });
 
     try world.step();
 

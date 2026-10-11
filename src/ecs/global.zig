@@ -29,6 +29,6 @@ test "Basic Globals" {
     defer world.deinit();
 
     _ = try world.setGlobal(Foo, .{ .value = 1 });
-    try world.addSystem(gpa, TestSystem.system, .{});
+    _ = try world.addSystem(gpa, TestSystem.system, .{});
     try world.step();
 }
