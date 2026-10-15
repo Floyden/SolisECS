@@ -130,7 +130,7 @@ test "Startup" {
     };
 
     const gpa = std.testing.allocator;
-    var world = try World.init(gpa);
+    var world = try World.init(gpa, std.testing.io);
     defer world.deinit();
 
     _ = try world.addSystem(gpa, Systems.test_system1, .{ .stage = .stage_startup });
@@ -163,7 +163,7 @@ test "Systems" {
     };
 
     const gpa = std.testing.allocator;
-    var world = try World.init(gpa);
+    var world = try World.init(gpa, std.testing.io);
     defer world.deinit();
 
     _ = try world.addSystem(gpa, Systems.test_system_start, .{ .stage = .stage_frame_start });

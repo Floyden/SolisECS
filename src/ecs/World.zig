@@ -14,6 +14,7 @@ const World = @This();
 const PointerOnlyParameter: bool = true;
 
 allocator: Allocator,
+io: std.Io,
 commands: ecs.Commands,
 components: std.AutoHashMapUnmanaged(ComponentDesc, void),
 storage: ecs.Storage,
@@ -23,9 +24,10 @@ nextEntity: Entity,
 
 frame: usize,
 
-pub fn init(allocator: Allocator) !World {
+pub fn init(allocator: Allocator, io: std.Io) !World {
     var world = World{
         .allocator = allocator,
+        .io = io,
         .commands = .init(),
         .components = .empty,
         .nextEntity = .{ .id = 1 },
@@ -199,6 +201,7 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
 
         switch (T) {
             std.mem.Allocator => @field(tuple.*, field_name) = self.allocator,
+            std.Io => @field(tuple.*, field_name) = self.io,
             *ecs.Commands => @field(tuple.*, field_name) = &self.commands,
             *World, *const World => {
                 @field(tuple.*, field_name) = self;
@@ -244,7 +247,7 @@ const Bar = struct {
 
 test "create" {
     const gpa = std.testing.allocator;
-    var world = try World.init(gpa);
+    var world = try World.init(gpa, std.testing.io);
     defer world.deinit();
 
     const e1 = try world.create(gpa, Foo{ .x = 1 });

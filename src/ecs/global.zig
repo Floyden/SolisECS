@@ -25,7 +25,7 @@ test "Basic Globals" {
     };
 
     const gpa = std.testing.allocator;
-    var world = try World.init(gpa);
+    var world = try World.init(gpa, std.testing.io);
     defer world.deinit();
 
     _ = try world.setGlobal(Foo, .{ .value = 1 });
