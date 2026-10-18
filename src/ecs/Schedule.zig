@@ -59,10 +59,8 @@ pub fn run_startup(world: *World) !void {
         });
         defer sys_iter.deinit();
 
-        while (try sys_iter.next()) |node| {
-            const system: *ecs.System = &node.@"0"[0];
-            system.last_frame = world.frame.advanceSubtick();
-            system.callback(system.context);
+        while (try sys_iter.next()) |_| {
+            try run_system(world, sys_iter.entity);
         }
     }
 
