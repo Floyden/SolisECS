@@ -68,6 +68,7 @@ pub fn Iter(comptime Q: anytype) type {
                     if (info.pointer.is_const) {
                         bind.* = archetype.getComponents(info.pointer.child).?;
                     } else {
+                        archetype.markComponentModified(T, self.query.world.frame);
                         bind.* = archetype.getComponentsMut(info.pointer.child).?;
                     }
                 } else {
@@ -118,7 +119,7 @@ pub fn TraverseIter(comptime Q: type) type {
             self.pair_iter.deinit();
         }
 
-        fn createBinding(self: *Self, archetype: *const ecs.Archetype, idx: usize) void {
+        fn createBinding(self: *Self, archetype: *ecs.Archetype, idx: usize) void {
             std.debug.assert(archetype.entities.items.len > idx);
 
             var binding: ComponentBinding = undefined;
@@ -129,6 +130,7 @@ pub fn TraverseIter(comptime Q: type) type {
                     if (info.pointer.is_const) {
                         bind.* = archetype.getComponents(info.pointer.child).?[idx .. idx + 1];
                     } else {
+                        archetype.markComponentModified(T, self.query.world.frame);
                         bind.* = archetype.getComponentsMut(info.pointer.child).?[idx .. idx + 1];
                     }
                 } else {

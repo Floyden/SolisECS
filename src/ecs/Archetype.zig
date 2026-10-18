@@ -158,6 +158,12 @@ pub fn markComponentModified(self: *Archetype, comptime T: type, frame: Frame) v
     self.last_modified.items[index] = frame;
 }
 
+pub fn markAllModified(self: *Archetype, frame: Frame) void {
+    for (&self.last_modified) |*last| {
+        last = frame;
+    }
+}
+
 pub fn getLastModified(self: *Archetype, comptime T: type) ?Frame {
     const index = self.getTypeLocation(T) orelse return null;
     return self.last_modified.items[index];

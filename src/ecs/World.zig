@@ -76,11 +76,11 @@ pub fn setGlobal(self: *World, comptime T: type, arg: T) !*T {
 }
 
 pub fn getGlobal(self: *World, comptime T: type) ?*const T {
-    return self.storage.get(T, .globals);
+    return self.storage.getGlobal(T);
 }
 
 pub fn getGlobalMut(self: *World, comptime T: type) ?*T {
-    return self.storage.getMut(T, .globals);
+    return self.storage.getGlobalMut(T);
 }
 
 pub fn addPair(self: *World, a: Entity, comptime R: type, b: Entity) !void {
@@ -150,7 +150,7 @@ pub fn insertEntity(self: *World, gpa: Allocator, entity: Entity) !void {
 
 /// Set the component to the given value. Will add the component to the entity if not present.
 pub fn set(self: *World, entity: Entity, comptime T: type, arg: T) !*T {
-    return try self.storage.setComponents(self.allocator, entity, T, arg);
+    return try self.storage.setComponents(self.allocator, entity, T, arg, self.frame);
 }
 
 pub fn get(self: *World, entity: Entity, comptime T: type) ?*const T {
@@ -158,7 +158,7 @@ pub fn get(self: *World, entity: Entity, comptime T: type) ?*const T {
 }
 
 pub fn getMut(self: *World, entity: Entity, comptime T: type) ?*T {
-    return self.storage.getMut(T, entity);
+    return self.storage.getMut(T, entity, self.frame);
 }
 
 pub fn has(self: *World, entity: Entity, comptime T: type) bool {

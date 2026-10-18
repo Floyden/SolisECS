@@ -2,8 +2,9 @@ const std = @import("std");
 const ecs = @import("solis_ecs");
 
 const Archetype = ecs.Archetype;
-const Entity = ecs.Entity;
 const Allocator = std.mem.Allocator;
+const Entity = ecs.Entity;
+const Frame = ecs.World.Frame;
 
 const Storage = @This();
 
@@ -136,13 +137,14 @@ pub fn get(self: *const Storage, comptime T: type, entity: Entity) ?*const T {
     return null;
 }
 
-pub fn getMut(self: *const Storage, comptime T: type, entity: Entity) ?*T {
+pub fn getMut(self: *const Storage, comptime T: type, entity: Entity, frame: Frame) ?*T {
     const location = self.findLocation(entity) orelse return null;
     const source = location.archetype;
     const index = location.index;
 
     for (source.components.items) |*list| {
         if (list.desc.id == ecs.typeId(T)) {
+            source.markComponentModified(T, frame);
             if (@sizeOf(T) == 0)
                 return @ptrCast(list.getMut(T));
 
@@ -195,7 +197,7 @@ pub fn removeComponent(self: *Storage, gpa: Allocator, entity: Entity, comptime 
     }
 }
 
-pub fn setComponents(self: *Storage, gpa: Allocator, entity: Entity, comptime T: type, arg: T) !*T {
+pub fn setComponents(self: *Storage, gpa: Allocator, entity: Entity, comptime T: type, arg: T, frame: Frame) !*T {
     // Find Archetype of the Entity
     const location = self.findLocation(entity) orelse return error.EntityNotFound;
     const entityIdx = location.index;
@@ -204,6 +206,7 @@ pub fn setComponents(self: *Storage, gpa: Allocator, entity: Entity, comptime T:
     // Overwrite existing entity
     const component_idx_opt = source.getTypeLocation(T);
     if (component_idx_opt) |idx| {
+        source.markComponentModified(T, frame);
         const dest: *T = &source.components.items[idx].getMut(T)[entityIdx];
         dest.* = arg;
         return dest;
@@ -246,6 +249,7 @@ pub fn setComponents(self: *Storage, gpa: Allocator, entity: Entity, comptime T:
     if (source.entities.items.len > 0 and location.index < source.entities.items.len) {
         try self.entity_map.put(gpa, source.entities.items[location.index], .create(source, location.index));
     }
+    destination.?.markComponentModified(T, frame);
 
     return component_ptr;
 }
@@ -261,8 +265,8 @@ test "Add Components" {
 
     const e = try storage.addEntity(gpa, Entity{ .id = 42 });
 
-    _ = try storage.setComponents(gpa, e, Position, .{ .x = 1, .y = 2 });
-    _ = try storage.setComponents(gpa, e, Velocity, .{ .x = 3, .y = 4 });
+    _ = try storage.setComponents(gpa, e, Position, .{ .x = 1, .y = 2 }, .{});
+    _ = try storage.setComponents(gpa, e, Velocity, .{ .x = 3, .y = 4 }, .{});
 
     const pos = storage.get(Position, e) orelse return error.NullValue;
     try std.testing.expectEqual(@as(f32, 1), pos.x);
@@ -279,13 +283,13 @@ test "Modify Components" {
     defer storage.deinit(gpa);
 
     const e = try storage.addEntity(gpa, Entity{ .id = 42 });
-    _ = try storage.setComponents(gpa, e, Position, .{ .x = 0, .y = 0 });
+    _ = try storage.setComponents(gpa, e, Position, .{ .x = 0, .y = 0 }, .{});
 
-    const pos = storage.getMut(Position, e) orelse return error.NullValue;
+    const pos = storage.getMut(Position, e, .{}) orelse return error.NullValue;
     pos.x = 10;
     pos.y = 20;
 
-    const pos2 = storage.getMut(Position, e) orelse return error.NullValue;
+    const pos2 = storage.getMut(Position, e, .{}) orelse return error.NullValue;
     try std.testing.expectEqual(@as(f32, 10), pos2.x);
     try std.testing.expectEqual(@as(f32, 20), pos2.y);
 }
@@ -296,7 +300,7 @@ test "Remove Component directly" {
     defer storage.deinit(gpa);
 
     const e = try storage.addEntity(gpa, Entity{ .id = 42 });
-    _ = try storage.setComponents(gpa, e, Position, .{ .x = 0, .y = 0 });
+    _ = try storage.setComponents(gpa, e, Position, .{ .x = 0, .y = 0 }, .{});
 
     try std.testing.expect(storage.get(Position, e) != null);
 
@@ -312,7 +316,7 @@ test "Remove Entity Mark/Sweep" {
     defer storage.deinit(gpa);
 
     const e = try storage.addEntity(gpa, Entity{ .id = 42 });
-    _ = try storage.setComponents(gpa, e, Position, .{ .x = 0, .y = 0 });
+    _ = try storage.setComponents(gpa, e, Position, .{ .x = 0, .y = 0 }, .{});
 
     try std.testing.expect(storage.get(Position, e) != null);
 
@@ -328,7 +332,7 @@ test "Remove Entity Directly" {
     defer storage.deinit(gpa);
 
     const e = try storage.addEntity(gpa, Entity{ .id = 42 });
-    _ = try storage.setComponents(gpa, e, Position, .{ .x = 0, .y = 0 });
+    _ = try storage.setComponents(gpa, e, Position, .{ .x = 0, .y = 0 }, .{});
 
     storage.removeEntity(gpa, e);
 
@@ -386,9 +390,9 @@ test "Multiple Entities" {
     const e1 = try storage.addEntity(gpa, Entity{ .id = 42 });
     const e2 = try storage.addEntity(gpa, Entity{ .id = 43 });
 
-    _ = try storage.setComponents(gpa, e1, Position, .{ .x = 1, .y = 1 });
-    _ = try storage.setComponents(gpa, e2, Position, .{ .x = 2, .y = 2 });
-    _ = try storage.setComponents(gpa, e2, Velocity, .{ .x = 3, .y = 3 });
+    _ = try storage.setComponents(gpa, e1, Position, .{ .x = 1, .y = 1 }, .{});
+    _ = try storage.setComponents(gpa, e2, Position, .{ .x = 2, .y = 2 }, .{});
+    _ = try storage.setComponents(gpa, e2, Velocity, .{ .x = 3, .y = 3 }, .{});
     try std.testing.expectEqual(@as(f32, 1), storage.get(Position, e1).?.x);
     try std.testing.expectEqual(@as(f32, 2), storage.get(Position, e2).?.x);
     try std.testing.expectEqual(@as(f32, 3), storage.get(Velocity, e2).?.x);
