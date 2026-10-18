@@ -1,6 +1,8 @@
 const ecs = @import("solis_ecs");
 const std = @import("std");
 
+const Frame = ecs.World.Frame;
+
 const SystemFn = *const fn (*anyopaque) void;
 
 pub const SystemDesc = struct {
@@ -14,7 +16,7 @@ pub const System = struct {
     deinit_cb: *const fn (*anyopaque, std.mem.Allocator) void,
     prepare_cb: *const fn (*anyopaque, *ecs.World) void,
     context: *anyopaque,
-    last_frame: usize = 0,
+    last_frame: Frame = .{},
 
     pub fn deinit(self: *System, gpa: std.mem.Allocator) void {
         @call(.auto, self.deinit_cb, .{ self.context, gpa });

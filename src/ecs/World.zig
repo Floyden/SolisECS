@@ -13,6 +13,24 @@ const World = @This();
 
 const PointerOnlyParameter: bool = true;
 
+pub const Frame = struct {
+    tick: u64 = 0, // Current frame
+    subtick: std.atomic.Value(u64) = .init(0), // Current system
+
+    pub fn greaterThan(a: Frame, b: Frame) bool {
+        return a.tick > b.tick or (a.tick == b.tick and a.subtick.load(.acquire) > b.subtick.load(.acquire));
+    }
+
+    pub fn advanceSubtick(self: *Frame) Frame {
+        const val = self.subtick.fetchAdd(1, .monotonic) + 1;
+        return .{ .tick = self.tick, .subtick = .init(val) };
+    }
+    pub fn advanceFrame(self: *Frame) void {
+        self.tick += 1;
+        _ = self.subtick.store(0, .monotonic);
+    }
+};
+
 allocator: Allocator,
 io: std.Io,
 commands: ecs.Commands,
@@ -22,7 +40,7 @@ pairStorage: ecs.PairStorage,
 
 nextEntity: Entity,
 
-frame: usize,
+frame: Frame,
 
 pub fn init(allocator: Allocator, io: std.Io) !World {
     var world = World{
@@ -33,7 +51,7 @@ pub fn init(allocator: Allocator, io: std.Io) !World {
         .nextEntity = .{ .id = 1 },
         .storage = try .init(allocator),
         .pairStorage = .empty,
-        .frame = 0,
+        .frame = .{},
     };
     try ecs.Schedule.init(allocator, &world);
 
@@ -231,7 +249,7 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
 }
 
 pub fn step(self: *World) !void {
-    self.frame += 1;
+    self.frame.advanceFrame();
     // TODO: make schedule an actual member of world. Why is it like this?
     try ecs.Schedule.run_pipeline(self);
     self.storage.removeMarked(self.allocator);

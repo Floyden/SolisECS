@@ -61,7 +61,7 @@ pub fn run_startup(world: *World) !void {
 
         while (try sys_iter.next()) |node| {
             const system: *ecs.System = &node.@"0"[0];
-            system.last_frame = world.frame;
+            system.last_frame = world.frame.advanceSubtick();
             system.callback(system.context);
         }
     }
@@ -70,7 +70,7 @@ pub fn run_startup(world: *World) !void {
 }
 
 pub fn run_pipeline(world: *World) !void {
-    if (world.frame == 1)
+    if (world.frame.tick == 1)
         try run_startup(world);
 
     var query = try Query(.{*ecs.System}, .{}).init(world.allocator, world, .none);
@@ -96,12 +96,14 @@ pub fn run_pipeline(world: *World) !void {
             try run_system(world, sys_iter.entity);
         }
     }
+    _ = world.frame.advanceSubtick();
     world.commands.execute(world);
 }
 
 pub fn run_system(world: *World, entity: Entity) !void {
     const system = world.getMut(entity, System) orelse return;
-    if (system.last_frame >= world.frame) return;
+    if (system.last_frame.tick >= world.frame.tick) return;
+    const frame = world.frame.advanceSubtick();
 
     var deps = try world.traverse(.{
         .node = entity,
@@ -109,7 +111,7 @@ pub fn run_system(world: *World, entity: Entity) !void {
     });
     defer deps.deinit();
 
-    system.last_frame = world.frame;
+    system.last_frame = frame;
     while (try deps.next()) |dep| {
         try run_system(world, dep);
     }
