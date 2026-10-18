@@ -68,11 +68,11 @@ pub fn Iter(comptime Q: anytype) type {
                     if (info.pointer.is_const) {
                         bind.* = archetype.getComponents(info.pointer.child).?;
                     } else {
-                        archetype.markComponentModified(T, self.query.world.frame);
+                        archetype.markComponentModified(info.pointer.child, self.query.world.frame);
                         bind.* = archetype.getComponentsMut(info.pointer.child).?;
                     }
                 } else {
-                    bind.* = archetype.getComponentsMut(T).?;
+                    bind.* = archetype.getComponents(T).?;
                 }
             }
             self.binding = binding;
@@ -130,11 +130,11 @@ pub fn TraverseIter(comptime Q: type) type {
                     if (info.pointer.is_const) {
                         bind.* = archetype.getComponents(info.pointer.child).?[idx .. idx + 1];
                     } else {
-                        archetype.markComponentModified(T, self.query.world.frame);
+                        archetype.markComponentModified(info.pointer.child, self.query.world.frame);
                         bind.* = archetype.getComponentsMut(info.pointer.child).?[idx .. idx + 1];
                     }
                 } else {
-                    bind.* = archetype.getComponentsMut(T).?[idx .. idx + 1];
+                    bind.* = archetype.getComponents(T).?[idx .. idx + 1];
                 }
             }
             self.binding = binding;
@@ -217,4 +217,36 @@ pub fn Query(components: anytype, filters: anytype) type {
             return TraverseIter(Self).init(gpa, self, desc);
         }
     };
+}
+
+test "track mutable access" {
+    const Position = struct { x: f32, y: f32 };
+    const gpa = std.testing.allocator;
+    var world = try ecs.World.init(gpa, std.testing.io);
+    defer world.deinit();
+
+    _ = try world.create(gpa, Position{ .x = 1, .y = 2 });
+
+    // A read-only binding must not mark the component.
+    var read_query = try Query(.{Position}, .{}).init(gpa, &world, .none);
+    defer read_query.deinit(gpa);
+    var read_iter = read_query.iter();
+    _ = read_iter.next() orelse return error.TestExpectedEqual;
+    const initial = read_query.archetypes.items[0].getLastModified(Position).?;
+    try std.testing.expectEqual(@as(u64, 0), initial.tick);
+    try std.testing.expectEqual(@as(u64, 0), initial.subtick.load(.monotonic));
+
+    // Mutable query bindings must mark the actual component type.
+    _ = world.frame.advanceSubtick();
+    var mut_query = try Query(.{*Position}, .{}).init(gpa, &world, .none);
+    defer mut_query.deinit(gpa);
+    var mut_iter = mut_query.iter();
+    _ = mut_iter.next() orelse return error.TestExpectedEqual;
+
+    const modified = mut_query.archetypes.items[0].getLastModified(Position).?;
+    try std.testing.expectEqual(world.frame.tick, modified.tick);
+    try std.testing.expectEqual(
+        world.frame.subtick.load(.monotonic),
+        modified.subtick.load(.monotonic),
+    );
 }
