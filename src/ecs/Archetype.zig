@@ -5,6 +5,7 @@ const ArrayList = std.ArrayList;
 const ComponentDesc = ecs.ComponentDesc;
 const ComponentList = ecs.ComponentList;
 const Entity = ecs.Entity;
+const Frame = ecs.World.Frame;
 
 const Archetype = @This();
 
@@ -17,51 +18,58 @@ pub const Edge = struct {
 pub const empty = Archetype{
     .entities = .empty,
     .components = .empty,
-    .addTypeEdges = .empty,
-    .removeTypeEdges = .empty,
+    .add_type_edges = .empty,
+    .remove_type_edges = .empty,
+    .last_modified = .empty,
 };
 
 entities: ArrayList(Entity),
 components: ArrayList(ecs.ComponentList),
-addTypeEdges: ArrayList(Edge),
-removeTypeEdges: ArrayList(Edge),
+last_modified: ArrayList(Frame),
+add_type_edges: ArrayList(Edge),
+remove_type_edges: ArrayList(Edge),
 
 fn typeLt(_: void, a: ComponentList, b: ComponentList) bool {
     return @intFromPtr(a.desc.id) < @intFromPtr(b.desc.id);
 }
 
 pub fn init(gpa: std.mem.Allocator, components: []const ComponentDesc) !Archetype {
-    var componentVec: ArrayList(ComponentList) = .empty;
+    var component_vec: ArrayList(ComponentList) = try .initCapacity(gpa, components.len);
+    var frame_vec: ArrayList(Frame) = try .initCapacity(gpa, components.len);
 
     for (components) |component| {
-        try componentVec.append(gpa, ComponentList.init(component));
+        component_vec.appendAssumeCapacity(ComponentList.init(component));
+        frame_vec.appendAssumeCapacity(.{});
     }
 
     // Number of elements should be rather small, perfect for insertion sort
-    std.sort.insertion(ComponentList, componentVec.items, {}, typeLt);
+    std.sort.insertion(ComponentList, component_vec.items, {}, typeLt);
 
     return Archetype{
         .entities = .empty,
-        .components = componentVec,
-        .addTypeEdges = .empty,
-        .removeTypeEdges = .empty,
+        .components = component_vec,
+        .last_modified = frame_vec,
+        .add_type_edges = .empty,
+        .remove_type_edges = .empty,
     };
 }
 
 pub fn deinit(self: *Archetype, gpa: std.mem.Allocator) void {
+    self.last_modified.deinit(gpa);
     self.entities.deinit(gpa);
     for (self.components.items) |*list| {
         list.deinit(gpa);
     }
     self.components.deinit(gpa);
-    self.addTypeEdges.deinit(gpa);
-    self.removeTypeEdges.deinit(gpa);
+    self.add_type_edges.deinit(gpa);
+    self.remove_type_edges.deinit(gpa);
 }
 
 pub fn clearAndFree(self: *Archetype, gpa: std.mem.Allocator) void {
     for (self.components.items) |*list| {
         list.clearAndFree(gpa);
     }
+    self.last_modified.deinit(gpa);
     self.entities.clearAndFree(gpa);
 }
 
@@ -143,6 +151,16 @@ pub fn getComponentsMut(self: *const Archetype, comptime T: type) ?[]T {
 
 pub fn count(self: *const Archetype) usize {
     return self.entities.items.len;
+}
+
+pub fn markComponentModified(self: *Archetype, comptime T: type, frame: Frame) void {
+    const index = self.getTypeLocation(T) orelse return;
+    self.last_modified.items[index] = frame;
+}
+
+pub fn getLastModified(self: *Archetype, comptime T: type) ?Frame {
+    const index = self.getTypeLocation(T) orelse return null;
+    return self.last_modified.items[index];
 }
 
 /// Adds another component to the current archetype. The newly allocated components are not initialized

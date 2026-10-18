@@ -159,7 +159,7 @@ pub fn removeComponent(self: *Storage, gpa: Allocator, entity: Entity, comptime 
 
     // Find new destination
     var destination: ?*Archetype = null;
-    for (source.removeTypeEdges.items) |edge| {
+    for (source.remove_type_edges.items) |edge| {
         if (edge.id == ecs.typeId(T)) {
             destination = edge.to;
             break;
@@ -181,8 +181,8 @@ pub fn removeComponent(self: *Storage, gpa: Allocator, entity: Entity, comptime 
         new_archetype.* = try Archetype.init(gpa, types);
         try self.archetypes.append(gpa, new_archetype);
         var dest = self.archetypes.items[self.archetypes.items.len - 1];
-        try dest.addTypeEdges.append(gpa, Archetype.Edge{ .from = dest, .to = source, .id = ecs.typeId(T) });
-        try source.removeTypeEdges.append(gpa, Archetype.Edge{ .from = source, .to = dest, .id = ecs.typeId(T) });
+        try dest.add_type_edges.append(gpa, Archetype.Edge{ .from = dest, .to = source, .id = ecs.typeId(T) });
+        try source.remove_type_edges.append(gpa, Archetype.Edge{ .from = source, .to = dest, .id = ecs.typeId(T) });
         destination = dest;
     }
 
@@ -211,7 +211,7 @@ pub fn setComponents(self: *Storage, gpa: Allocator, entity: Entity, comptime T:
 
     // Find new destination
     var destination: ?*Archetype = null;
-    for (source.addTypeEdges.items) |edge| {
+    for (source.add_type_edges.items) |edge| {
         if (edge.id == ecs.typeId(T)) {
             destination = edge.to;
             break;
@@ -231,8 +231,8 @@ pub fn setComponents(self: *Storage, gpa: Allocator, entity: Entity, comptime T:
         new_archetype.* = try Archetype.init(gpa, types);
         try self.archetypes.append(gpa, new_archetype);
         var dest = self.archetypes.items[self.archetypes.items.len - 1];
-        try dest.removeTypeEdges.append(gpa, Archetype.Edge{ .from = dest, .to = source, .id = ecs.typeId(T) });
-        try source.addTypeEdges.append(gpa, Archetype.Edge{ .from = source, .to = dest, .id = ecs.typeId(T) });
+        try dest.remove_type_edges.append(gpa, Archetype.Edge{ .from = dest, .to = source, .id = ecs.typeId(T) });
+        try source.add_type_edges.append(gpa, Archetype.Edge{ .from = source, .to = dest, .id = ecs.typeId(T) });
         destination = dest;
     }
 
