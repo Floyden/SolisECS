@@ -13,6 +13,9 @@ pub const PairStorage = @import("ecs/pairs.zig").Storage;
 pub const TraverseDesc = @import("ecs/pairs.zig").TraverseDesc;
 pub const World = @import("ecs/World.zig");
 
+const filters = @import("ecs/filters.zig");
+pub const Changed = filters.Changed;
+
 pub const typeId = @import("ecs/type_id.zig").typeId;
 pub const TypeId = @import("ecs/type_id.zig").TypeId;
 

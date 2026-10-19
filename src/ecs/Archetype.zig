@@ -164,7 +164,7 @@ pub fn markAllModified(self: *Archetype, frame: Frame) void {
     }
 }
 
-pub fn getLastModified(self: *Archetype, comptime T: type) ?Frame {
+pub fn getLastModified(self: *const Archetype, comptime T: type) ?Frame {
     const index = self.getTypeLocation(T) orelse return null;
     return self.last_modified.items[index];
 }
