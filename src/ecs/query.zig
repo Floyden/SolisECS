@@ -68,10 +68,11 @@ pub fn Iter(comptime Q: anytype) type {
                     if (info.pointer.is_const) {
                         bind.* = archetype.getComponents(info.pointer.child).?;
                     } else {
+                        archetype.markComponentModified(info.pointer.child, self.query.world.frame);
                         bind.* = archetype.getComponentsMut(info.pointer.child).?;
                     }
                 } else {
-                    bind.* = archetype.getComponentsMut(T).?;
+                    bind.* = archetype.getComponents(T).?;
                 }
             }
             self.binding = binding;
@@ -79,11 +80,12 @@ pub fn Iter(comptime Q: anytype) type {
 
         pub fn next(self: *Self) ?ComponentBinding {
             const archetypes = self.query.archetypes.items;
-            while (archetypes.len > self.archetype) {
+            outer: while (archetypes.len > self.archetype) {
                 defer self.archetype += 1;
                 const archetype: *ecs.Archetype = self.query.archetypes.items[self.archetype];
                 if (archetype.entities.items.len == 0)
                     continue;
+                inline for (self.query.filter_instances) |filter| if (!filter.match(archetype)) continue :outer;
 
                 self.createBinding();
                 return self.binding;
@@ -118,7 +120,7 @@ pub fn TraverseIter(comptime Q: type) type {
             self.pair_iter.deinit();
         }
 
-        fn createBinding(self: *Self, archetype: *const ecs.Archetype, idx: usize) void {
+        fn createBinding(self: *Self, archetype: *ecs.Archetype, idx: usize) void {
             std.debug.assert(archetype.entities.items.len > idx);
 
             var binding: ComponentBinding = undefined;
@@ -129,10 +131,11 @@ pub fn TraverseIter(comptime Q: type) type {
                     if (info.pointer.is_const) {
                         bind.* = archetype.getComponents(info.pointer.child).?[idx .. idx + 1];
                     } else {
+                        archetype.markComponentModified(info.pointer.child, self.query.world.frame);
                         bind.* = archetype.getComponentsMut(info.pointer.child).?[idx .. idx + 1];
                     }
                 } else {
-                    bind.* = archetype.getComponentsMut(T).?[idx .. idx + 1];
+                    bind.* = archetype.getComponents(T).?[idx .. idx + 1];
                 }
             }
             self.binding = binding;
@@ -140,7 +143,8 @@ pub fn TraverseIter(comptime Q: type) type {
 
         pub fn next(self: *Self) !?ComponentBinding {
             while (try self.pair_iter.next()) |entity| {
-                for (self.query.archetypes.items) |archetype| {
+                outer: for (self.query.archetypes.items) |archetype| {
+                    inline for (self.query.filter_instances) |filter| if (!filter.match(archetype)) continue :outer;
                     if (archetype.findEntity(entity)) |idx| {
                         self.entity = entity;
                         self.createBinding(archetype, idx);
@@ -159,14 +163,25 @@ pub fn Query(components: anytype, filters: anytype) type {
     return struct {
         const Self = @This();
         pub const Components = components;
-        pub const ComponentArray = parseTupleTypes(components);
+        pub const ComponentArray = parseTupleTypes(Components);
         pub const FilterArray = parseTupleTypes(filters);
+        pub const FilterTuple = std.meta.Tuple(&FilterArray);
 
         archetypes: std.ArrayList(*ecs.Archetype),
+        filter_instances: FilterTuple,
         world: *World,
 
         pub fn init(_: std.mem.Allocator, world: *World, _: ecs.Entity) !Self {
-            var res: Self = .{ .archetypes = .empty, .world = world };
+            var filter_instances: FilterTuple = undefined;
+            inline for (@typeInfo(FilterTuple).@"struct".fields) |field| {
+                @field(filter_instances, field.name) = @as(field.type, .{});
+            }
+
+            var res: Self = .{
+                .archetypes = .empty,
+                .world = world,
+                .filter_instances = filter_instances,
+            };
             res.prepare(world);
             return res;
         }
@@ -192,6 +207,8 @@ pub fn Query(components: anytype, filters: anytype) type {
 
                 self.archetypes.append(world.allocator, archetype) catch @panic("OOM");
             }
+
+            inline for (&self.filter_instances) |*filter| filter.prepare(world);
         }
 
         pub fn iter(self: *const Self) Iter(Self) {
@@ -215,4 +232,62 @@ pub fn Query(components: anytype, filters: anytype) type {
             return TraverseIter(Self).init(gpa, self, desc);
         }
     };
+}
+
+test "track mutable access" {
+    const Position = struct { x: f32, y: f32 };
+    const gpa = std.testing.allocator;
+    var world = try ecs.World.init(gpa, std.testing.io);
+    defer world.deinit();
+
+    _ = try world.create(gpa, Position{ .x = 1, .y = 2 });
+
+    // A read-only binding must not mark the component.
+    var read_query = try Query(.{Position}, .{}).init(gpa, &world, .none);
+    defer read_query.deinit(gpa);
+    var read_iter = read_query.iter();
+    _ = read_iter.next() orelse return error.TestExpectedEqual;
+    const initial = read_query.archetypes.items[0].getLastModified(Position).?;
+    try std.testing.expectEqual(@as(u64, 0), initial.tick);
+    try std.testing.expectEqual(@as(u64, 0), initial.subtick.load(.monotonic));
+
+    // Mutable query bindings must mark the actual component type.
+    _ = world.frame.advanceSubtick();
+    var mut_query = try Query(.{*Position}, .{}).init(gpa, &world, .none);
+    defer mut_query.deinit(gpa);
+    var mut_iter = mut_query.iter();
+    _ = mut_iter.next() orelse return error.TestExpectedEqual;
+
+    const modified = mut_query.archetypes.items[0].getLastModified(Position).?;
+    try std.testing.expectEqual(world.frame.tick, modified.tick);
+    try std.testing.expectEqual(
+        world.frame.subtick.load(.monotonic),
+        modified.subtick.load(.monotonic),
+    );
+}
+
+test "query changed components" {
+    const Position = struct { x: f32, y: f32 };
+    const Velocity = struct { x: f32, y: f32 };
+    const gpa = std.testing.allocator;
+    var world = try ecs.World.init(gpa, std.testing.io);
+    defer world.deinit();
+
+    _ = try world.create(gpa, Position{ .x = 1, .y = 2 });
+    _ = try world.create(gpa, .{ Position{ .x = 2, .y = 3 }, Velocity{ .x = 1, .y = 2 } });
+
+    // Mutable query bindings must mark the actual component type.
+    _ = world.frame.advanceSubtick();
+    var mut_query = try Query(.{ *Position, Velocity }, .{}).init(gpa, &world, .none);
+    defer mut_query.deinit(gpa);
+    var mut_iter = mut_query.iter();
+    _ = mut_iter.next() orelse return error.TestExpectedEqual;
+
+    _ = world.frame.advanceSubtick();
+    var changed_query = try Query(.{Position}, .{ecs.Changed(Position)}).init(gpa, &world, .none);
+    defer changed_query.deinit(gpa);
+    var changed_iter = changed_query.iter();
+    const binding = changed_iter.next() orelse return error.TestExpectedEqual;
+    try std.testing.expectEqual(Position{ .x = 2, .y = 3 }, @field(binding, "0")[0]);
+    try std.testing.expectEqual(null, changed_iter.next());
 }
