@@ -99,9 +99,8 @@ pub fn run_pipeline(world: *World) !void {
 }
 
 pub fn run_system(world: *World, entity: Entity) !void {
-    const system = world.getMut(entity, System) orelse return;
+    var system = world.getMut(entity, System) orelse return;
     if (system.last_frame.tick >= world.frame.tick) return;
-    const frame = world.frame.advanceSubtick();
 
     var deps = try world.traverse(.{
         .node = entity,
@@ -109,11 +108,13 @@ pub fn run_system(world: *World, entity: Entity) !void {
     });
     defer deps.deinit();
 
-    system.last_frame = frame;
+    system.last_frame = world.frame; // Mark it as already run
     while (try deps.next()) |dep| {
         try run_system(world, dep);
     }
 
+    system = world.getMut(entity, System) orelse return; // system may have changed due to other systems
+    system.last_frame = world.frame.advanceSubtick();
     system.prepare(world);
     system.callback(system.context);
 }
