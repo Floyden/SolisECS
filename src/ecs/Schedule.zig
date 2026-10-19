@@ -100,7 +100,8 @@ pub fn run_pipeline(world: *World) !void {
 
 pub fn run_system(world: *World, entity: Entity) !void {
     var system = world.getMut(entity, System) orelse return;
-    if (system.last_frame.tick >= world.frame.tick) return;
+    if (system.state != .idle or system.last_frame.tick >= world.frame.tick) return;
+    system.state = .pending;
 
     var deps = try world.traverse(.{
         .node = entity,
@@ -108,7 +109,6 @@ pub fn run_system(world: *World, entity: Entity) !void {
     });
     defer deps.deinit();
 
-    system.last_frame = world.frame; // Mark it as already run
     while (try deps.next()) |dep| {
         try run_system(world, dep);
     }
@@ -116,7 +116,9 @@ pub fn run_system(world: *World, entity: Entity) !void {
     system = world.getMut(entity, System) orelse return; // system may have changed due to other systems
     system.last_frame = world.frame.advanceSubtick();
     system.prepare(world);
+    system.state = .running;
     system.callback(system.context);
+    system.state = .idle;
 }
 
 var startup_executed = [2]bool{ false, false };
