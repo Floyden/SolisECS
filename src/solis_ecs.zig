@@ -15,6 +15,7 @@ pub const World = @import("ecs/World.zig");
 
 const filters = @import("ecs/filters.zig");
 pub const Changed = filters.Changed;
+pub const Or = filters.Or;
 
 pub const typeId = @import("ecs/type_id.zig").typeId;
 pub const TypeId = @import("ecs/type_id.zig").TypeId;
