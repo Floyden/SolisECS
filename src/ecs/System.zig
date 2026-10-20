@@ -11,12 +11,19 @@ pub const SystemDesc = struct {
     successors: []const ecs.Entity = &.{}, // Systems which run after this system
 };
 
+pub const ExecutionState = enum {
+    idle,
+    pending, // waiting for dependencies
+    running, // currently running
+};
+
 pub const System = struct {
     callback: SystemFn,
     deinit_cb: *const fn (*anyopaque, std.mem.Allocator) void,
     prepare_cb: *const fn (*anyopaque, *ecs.World) void,
     context: *anyopaque,
     last_frame: Frame = .{},
+    state: ExecutionState = .idle,
 
     pub fn deinit(self: *System, gpa: std.mem.Allocator) void {
         @call(.auto, self.deinit_cb, .{ self.context, gpa });
