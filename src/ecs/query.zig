@@ -2,11 +2,17 @@ const std = @import("std");
 const ecs = @import("solis_ecs");
 const World = ecs.World;
 
-fn parseTupleTypes(comptime tuple: anytype) [@typeInfo(@TypeOf(tuple)).@"struct".fields.len]type {
+fn parseTupleTypes(comptime tuple: anytype) [@typeInfo(@TypeOf(tuple)).@"struct".field_types.len]type {
     const TupleType = @TypeOf(tuple);
     const type_info = @typeInfo(TupleType);
 
-    const fields = type_info.@"struct".fields;
+    // const field_types = type_info.@"struct".field_types;
+    // const type_array: [field_types.len]type = comptime blk: {
+    //     var res: [field_types.len]type = undefined;
+    //     for (&res, field_types) |*dst, i| {
+    //         dst.* = i;
+
+    const fields = type_info.@"struct".field_names;
     const type_array: [fields.len]type = comptime blk: {
         var res: [fields.len]type = undefined;
         for (&res, 0..) |*dst, i| {
@@ -23,7 +29,7 @@ pub fn ComponentBindings(comptime types: []const type) type {
     for (types, &res) |T, *R| {
         const info = @typeInfo(T);
         if (info == .pointer) {
-            if (info.pointer.is_const) {
+            if (info.pointer.attrs.@"const") {
                 R.* = []const info.pointer.child;
             } else {
                 R.* = []info.pointer.child;
@@ -32,7 +38,7 @@ pub fn ComponentBindings(comptime types: []const type) type {
             R.* = []const T;
         }
     }
-    return std.meta.Tuple(&res);
+    return @Tuple(&res);
 }
 
 pub fn Iter(comptime Q: anytype) type {
@@ -65,7 +71,7 @@ pub fn Iter(comptime Q: anytype) type {
                 const T = @TypeOf(bind.*);
                 const info = @typeInfo(T);
                 if (info == .pointer) {
-                    if (info.pointer.is_const) {
+                    if (info.pointer.attrs.@"const") {
                         bind.* = archetype.getComponents(info.pointer.child).?;
                     } else {
                         archetype.markComponentModified(info.pointer.child, self.query.world.frame);
@@ -128,7 +134,7 @@ pub fn TraverseIter(comptime Q: type) type {
                 const T = @TypeOf(bind.*);
                 const info = @typeInfo(T);
                 if (info == .pointer) {
-                    if (info.pointer.is_const) {
+                    if (info.pointer.attrs.@"const") {
                         bind.* = archetype.getComponents(info.pointer.child).?[idx .. idx + 1];
                     } else {
                         archetype.markComponentModified(info.pointer.child, self.query.world.frame);
@@ -165,16 +171,17 @@ pub fn Query(components: anytype, filters: anytype) type {
         pub const Components = components;
         pub const ComponentArray = parseTupleTypes(Components);
         pub const FilterArray = parseTupleTypes(filters);
-        pub const FilterTuple = std.meta.Tuple(&FilterArray);
+        pub const FilterTuple = @Tuple(&FilterArray);
 
         archetypes: std.ArrayList(*ecs.Archetype),
         filter_instances: FilterTuple,
         world: *World,
 
         pub fn init(_: std.mem.Allocator, world: *World, _: ecs.Entity) !Self {
+            const filter_info = @typeInfo(FilterTuple).@"struct";
             var filter_instances: FilterTuple = undefined;
-            inline for (@typeInfo(FilterTuple).@"struct".fields) |field| {
-                @field(filter_instances, field.name) = @as(field.type, .{});
+            inline for (filter_info.field_types, filter_info.field_names) |T, name| {
+                @field(filter_instances, name) = @as(T, .{});
             }
 
             var res: Self = .{

@@ -206,9 +206,8 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
     ctx.callback = system;
 
     const system_entity = try self.createEmpty(gpa);
-    const params = system_info.@"fn".params;
-    inline for (params, 0..) |param, i| {
-        const T = param.type.?;
+    inline for (system_info.@"fn".param_types, 0..) |T_opt, i| {
+        const T = T_opt.?;
         const Base = if (@typeInfo(T) == .pointer) std.meta.Child(T) else T;
         const field_name = comptime std.fmt.comptimePrint("{}", .{i});
 
@@ -259,7 +258,7 @@ pub fn step(self: *World) !void {
 
 const Foo = struct { x: u32 = 4 };
 const Bar = struct {
-    const Requires = .{Foo};
+    pub const Requires = .{Foo};
     y: u32,
 };
 

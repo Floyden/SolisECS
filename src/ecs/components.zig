@@ -120,9 +120,9 @@ pub const Description = struct {
         if (@typeInfo(T) == .@"struct" and @hasDecl(T, "deinit")) {
             const fn_type = @typeInfo(@TypeOf(T.deinit));
             if (fn_type != .@"fn") @compileError("deinit is not a function");
-            if (fn_type.@"fn".params.len != 2 or
-                fn_type.@"fn".params[0].type.? != *T or
-                fn_type.@"fn".params[1].type.? != std.mem.Allocator) @compileError(std.fmt.comptimePrint("{s}.deinit has not the signature \"fn deinit(*type, Allocator) void\"", .{@typeName(T)}));
+            if (fn_type.@"fn".param_types.len != 2 or
+                fn_type.@"fn".param_types[0].? != *T or
+                fn_type.@"fn".param_types[1].? != std.mem.Allocator) @compileError(std.fmt.comptimePrint("{s}.deinit has not the signature \"fn deinit(*type, Allocator) void\"", .{@typeName(T)}));
 
             deinit_ptr = @ptrCast(&@field(T, "deinit"));
         }
