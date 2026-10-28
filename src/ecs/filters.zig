@@ -8,7 +8,8 @@ pub fn Changed(comptime T: type) type {
         current_frame: ecs.World.Frame = .{},
 
         pub fn match(self: @This(), archetype: *const ecs.Archetype) bool {
-            const modified = archetype.getLastModified(T) orelse return false;
+            if (!archetype.hasType(T)) return false;
+            const modified = archetype.getLastModified(T) orelse return true;
             if (modified.greaterThan(self.last_frame)) return true;
             return false;
         }

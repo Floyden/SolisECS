@@ -25,7 +25,7 @@ pub const empty = Archetype{
 
 entities: ArrayList(Entity),
 components: ArrayList(ecs.ComponentList),
-last_modified: ArrayList(Frame),
+last_modified: ArrayList(?Frame),
 add_type_edges: ArrayList(Edge),
 remove_type_edges: ArrayList(Edge),
 
@@ -35,11 +35,11 @@ fn typeLt(_: void, a: ComponentList, b: ComponentList) bool {
 
 pub fn init(gpa: std.mem.Allocator, components: []const ComponentDesc) !Archetype {
     var component_vec: ArrayList(ComponentList) = try .initCapacity(gpa, components.len);
-    var frame_vec: ArrayList(Frame) = try .initCapacity(gpa, components.len);
+    var frame_vec: ArrayList(?Frame) = try .initCapacity(gpa, components.len);
 
     for (components) |component| {
         component_vec.appendAssumeCapacity(ComponentList.init(component));
-        frame_vec.appendAssumeCapacity(.{});
+        frame_vec.appendAssumeCapacity(null);
     }
 
     // Number of elements should be rather small, perfect for insertion sort

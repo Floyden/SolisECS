@@ -189,7 +189,7 @@ pub fn Query(components: anytype, filters: anytype) type {
                 .world = world,
                 .filter_instances = filter_instances,
             };
-            res.prepare(world);
+            res.collectArchetypes(world);
             return res;
         }
 
@@ -198,6 +198,11 @@ pub fn Query(components: anytype, filters: anytype) type {
         }
 
         pub fn prepare(self: *Self, world: *World) void {
+            self.collectArchetypes(world);
+            inline for (&self.filter_instances) |*filter| filter.prepare(world);
+        }
+
+        fn collectArchetypes(self: *Self, world: *World) void {
             self.archetypes.clearRetainingCapacity();
             outer: for (world.storage.archetypes.items) |archetype| {
                 if (archetype.components.items.len < ComponentArray.len) continue;
@@ -214,8 +219,6 @@ pub fn Query(components: anytype, filters: anytype) type {
 
                 self.archetypes.append(world.allocator, archetype) catch @panic("OOM");
             }
-
-            inline for (&self.filter_instances) |*filter| filter.prepare(world);
         }
 
         pub fn iter(self: *const Self) Iter(Self) {
@@ -256,7 +259,7 @@ test "track mutable access" {
     _ = read_iter.next() orelse return error.TestExpectedEqual;
     const initial = read_query.archetypes.items[0].getLastModified(Position).?;
     try std.testing.expectEqual(@as(u64, 0), initial.tick);
-    try std.testing.expectEqual(@as(u64, 0), initial.subtick.load(.monotonic));
+    try std.testing.expectEqual(@as(u64, 1), initial.subtick.load(.monotonic));
 
     // Mutable query bindings must mark the actual component type.
     _ = world.frame.advanceSubtick();
@@ -283,6 +286,16 @@ test "query changed components" {
     _ = try world.create(gpa, Position{ .x = 1, .y = 2 });
     _ = try world.create(gpa, .{ Position{ .x = 2, .y = 3 }, Velocity{ .x = 1, .y = 2 } });
 
+    var changed_query = try Query(.{Position}, .{ecs.Changed(Position)}).init(gpa, &world, .none);
+    defer changed_query.deinit(gpa);
+    changed_query.prepare(&world);
+    var changed_iter = changed_query.iter();
+    var binding = changed_iter.next() orelse return error.TestExpectedEqual;
+    try std.testing.expectEqual(Position{ .x = 1, .y = 2 }, @field(binding, "0")[0]);
+    binding = changed_iter.next() orelse return error.TestExpectedEqual;
+    try std.testing.expectEqual(Position{ .x = 2, .y = 3 }, @field(binding, "0")[0]);
+    try std.testing.expectEqual(null, changed_iter.next());
+
     // Mutable query bindings must mark the actual component type.
     _ = world.frame.advanceSubtick();
     var mut_query = try Query(.{ *Position, Velocity }, .{}).init(gpa, &world, .none);
@@ -291,10 +304,28 @@ test "query changed components" {
     _ = mut_iter.next() orelse return error.TestExpectedEqual;
 
     _ = world.frame.advanceSubtick();
-    var changed_query = try Query(.{Position}, .{ecs.Changed(Position)}).init(gpa, &world, .none);
-    defer changed_query.deinit(gpa);
-    var changed_iter = changed_query.iter();
-    const binding = changed_iter.next() orelse return error.TestExpectedEqual;
+    changed_query.prepare(&world);
+    changed_iter = changed_query.iter();
+    binding = changed_iter.next() orelse return error.TestExpectedEqual;
     try std.testing.expectEqual(Position{ .x = 2, .y = 3 }, @field(binding, "0")[0]);
     try std.testing.expectEqual(null, changed_iter.next());
 }
+
+// test "query frame 0 changes" {
+//     const Position = struct { x: f32, y: f32 };
+//     const Velocity = struct { x: f32, y: f32 };
+//     const gpa = std.testing.allocator;
+//     var world = try ecs.World.init(gpa, std.testing.io);
+//     defer world.deinit();
+//
+//     _ = try world.create(gpa, Position{ .x = 1, .y = 2 });
+//     _ = try world.create(gpa, .{ Position{ .x = 2, .y = 3 }, Velocity{ .x = 1, .y = 2 } });
+//
+//     _ = world.frame.advanceSubtick();
+//     var changed_query = try Query(.{Position}, .{ecs.Changed(Position)}).init(gpa, &world, .none);
+//     defer changed_query.deinit(gpa);
+//     var changed_iter = changed_query.iter();
+//     const binding = changed_iter.next() orelse return error.TestExpectedEqual;
+//     try std.testing.expectEqual(Position{ .x = 2, .y = 3 }, @field(binding, "0")[0]);
+//     try std.testing.expectEqual(null, changed_iter.next());
+// }

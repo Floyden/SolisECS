@@ -51,7 +51,7 @@ pub fn init(allocator: Allocator, io: std.Io) !World {
         .nextEntity = .{ .id = 1 },
         .storage = try .init(allocator),
         .pairStorage = .empty,
-        .frame = .{},
+        .frame = .{ .subtick = .init(1) },
     };
     try ecs.Schedule.init(allocator, &world);
 
