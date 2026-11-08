@@ -250,7 +250,7 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
 pub fn step(self: *World) !void {
     self.frame.advanceFrame();
     // TODO: make schedule an actual member of world. Why is it like this?
-    try ecs.Schedule.run_pipeline(self);
+    try ecs.Schedule.runPipeline(self);
     self.storage.removeMarked(self.allocator);
 }
 

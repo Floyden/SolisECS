@@ -39,7 +39,7 @@ pub fn init(gpa: std.mem.Allocator, world: *World) !void {
     // world.schedule = schedule;
 }
 
-pub fn run_startup(world: *World) !void {
+pub fn runStartup(world: *World) !void {
     // TODO: Filter disabled systems
     var query = try Query(.{*ecs.System}, .{}).init(world.allocator, world, .none);
     defer query.deinit(world.allocator);
@@ -60,16 +60,16 @@ pub fn run_startup(world: *World) !void {
         defer sys_iter.deinit();
 
         while (try sys_iter.next()) |_| {
-            try run_system(world, sys_iter.entity);
+            try runSystem(world, sys_iter.entity);
         }
     }
 
     // TODO: Remove startup systems
 }
 
-pub fn run_pipeline(world: *World) !void {
+pub fn runPipeline(world: *World) !void {
     if (world.frame.tick == 1)
-        try run_startup(world);
+        try runStartup(world);
 
     var query = try Query(.{*ecs.System}, .{}).init(world.allocator, world, .none);
     defer query.deinit(world.allocator);
@@ -91,34 +91,37 @@ pub fn run_pipeline(world: *World) !void {
         defer sys_iter.deinit();
 
         while (try sys_iter.next()) |_| {
-            try run_system(world, sys_iter.entity);
+            try runSystem(world, sys_iter.entity);
         }
     }
     _ = world.frame.advanceSubtick();
     world.commands.execute(world);
 }
 
-pub fn run_system(world: *World, entity: Entity) !void {
+pub fn runSystem(world: *World, entity: Entity) !void {
     var system = world.getMut(entity, System) orelse return;
-    if (system.state != .idle or system.last_frame.tick >= world.frame.tick) return;
-    system.state = .pending;
+    if (system.last_frame.tick >= world.frame.tick) return;
+    if (system.state.cmpxchgStrong(.idle, .pending, .acq_rel, .acquire) != null) return;
+    errdefer {
+        if (world.getMut(entity, System)) |sys|
+            sys.state.store(.idle, .release);
+    }
 
-    var deps = try world.traverse(.{
-        .node = entity,
+    var deps = world.pairStorage.match(.{
+        .src = entity,
+        .dst = .any,
         .relation = ecs.typeId(Entity.DependsOn),
     });
-    defer deps.deinit();
-
-    while (try deps.next()) |dep| {
-        try run_system(world, dep);
+    while (deps.next()) |dep| {
+        try runSystem(world, dep.dst);
     }
 
     system = world.getMut(entity, System) orelse return; // system may have changed due to other systems
     system.last_frame = world.frame.advanceSubtick();
     system.prepare(world);
-    system.state = .running;
+    system.state.store(.running, .release);
     system.callback(system.context);
-    system.state = .idle;
+    system.state.store(.idle, .release);
 }
 
 var startup_executed = [2]bool{ false, false };
