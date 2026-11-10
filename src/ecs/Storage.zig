@@ -158,7 +158,7 @@ pub fn getMut(self: *const Storage, comptime T: type, entity: Entity, frame: Fra
     return null;
 }
 
-pub fn removeComponent(self: *Storage, gpa: Allocator, entity: Entity, comptime T: type) !void {
+pub fn removeComponent(self: *Storage, gpa: Allocator, entity: Entity, comptime T: type, frame: Frame) !void {
     // Find Archetype of the Entity
     const location = self.findLocation(entity) orelse return error.EntityNotFound;
     var source = location.archetype;
@@ -195,6 +195,7 @@ pub fn removeComponent(self: *Storage, gpa: Allocator, entity: Entity, comptime 
 
     const new_index = try source.moveEntity(gpa, destination.?, entity);
     try self.entity_map.put(gpa, entity, .create(destination.?, new_index));
+    destination.?.markAllModified(frame);
 
     // we use swap remove in moveEntity, update the swapped entity
     if (source.entities.items.len > 0 and location.index < source.entities.items.len) {
@@ -254,7 +255,7 @@ pub fn setComponents(self: *Storage, gpa: Allocator, entity: Entity, comptime T:
     if (source.entities.items.len > 0 and location.index < source.entities.items.len) {
         try self.entity_map.put(gpa, source.entities.items[location.index], .create(source, location.index));
     }
-    destination.?.markComponentModified(T, frame);
+    destination.?.markAllModified(frame);
 
     return component_ptr;
 }
@@ -309,7 +310,7 @@ test "Remove Component directly" {
 
     try std.testing.expect(storage.get(Position, e) != null);
 
-    try storage.removeComponent(gpa, e, Position);
+    try storage.removeComponent(gpa, e, Position, .{});
 
     try std.testing.expect(storage.findLocation(e) != null);
     try std.testing.expect(storage.get(Position, e) == null);
@@ -361,7 +362,7 @@ test "Remove Entity" {
     try std.testing.expectEqual(@as(f32, 2), pos.x);
 
     const e = try storage.addEntity(gpa, Entity{ .id = 42 });
-    try std.testing.expectError(error.ComponentNotFound, storage.removeComponent(gpa, e, Position));
+    try std.testing.expectError(error.ComponentNotFound, storage.removeComponent(gpa, e, Position, .{}));
 }
 
 test "Basic Global" {

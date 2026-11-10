@@ -311,6 +311,29 @@ test "query changed components" {
     try std.testing.expectEqual(null, changed_iter.next());
 }
 
+test "query changed components of moved entities" {
+    const Position = struct { x: f32, y: f32 };
+    const Velocity = struct { x: f32, y: f32 };
+    const gpa = std.testing.allocator;
+    var world = try ecs.World.init(gpa, std.testing.io);
+    defer world.deinit();
+
+    _ = try world.create(gpa, .{ Position{ .x = 2, .y = 3 }, Velocity{ .x = 1, .y = 2 } });
+
+    var changed_query = try Query(.{Position}, .{ecs.Changed(Position)}).init(gpa, &world, .none);
+    defer changed_query.deinit(gpa);
+    _ = world.frame.advanceSubtick();
+    changed_query.prepare(&world);
+    var changed_iter = changed_query.iter();
+    try std.testing.expect(changed_iter.next() != null);
+
+    world.frame.advanceFrame();
+    _ = world.frame.advanceSubtick();
+    changed_query.prepare(&world);
+    changed_iter = changed_query.iter();
+    try std.testing.expectEqual(null, changed_iter.next());
+}
+
 // test "query frame 0 changes" {
 //     const Position = struct { x: f32, y: f32 };
 //     const Velocity = struct { x: f32, y: f32 };

@@ -176,7 +176,7 @@ pub fn removeMarked(self: *World, gpa: Allocator) !void {
 }
 
 pub fn removeComponent(self: *World, entity: Entity, comptime T: type) !void {
-    try self.storage.removeComponent(self.allocator, entity, T);
+    try self.storage.removeComponent(self.allocator, entity, T, self.frame);
     try self.emit(ecs.event.ComponentRemoved{ .entity = entity, .component_type = typeId(T) });
 }
 

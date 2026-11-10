@@ -159,8 +159,8 @@ pub fn markComponentModified(self: *Archetype, comptime T: type, frame: Frame) v
 }
 
 pub fn markAllModified(self: *Archetype, frame: Frame) void {
-    for (&self.last_modified) |*last| {
-        last = frame;
+    for (self.last_modified.items) |*last| {
+        last.* = frame;
     }
 }
 
