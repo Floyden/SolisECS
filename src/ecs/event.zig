@@ -2,6 +2,7 @@ const std = @import("std");
 const Entity = @import("Entity.zig");
 const Global = @import("global.zig").Global;
 const World = @import("World.zig");
+const type_id = @import("type_id.zig");
 
 pub fn Events(comptime Event: type) type {
     return struct {
@@ -130,6 +131,31 @@ pub fn register(world: *World, T: type) !void {
     try world.register(world.allocator, Cursor(T));
     _ = try world.setGlobal(Events(T), Events(T).init());
     _ = try world.addSystem(world.allocator, Events(T).update, .{ .stage = .stage_frame_start });
+}
+
+pub const ComponentRemoved = struct {
+    entity: Entity,
+    component_type: type_id.TypeId,
+};
+
+pub const ComponentAdded = struct {
+    entity: Entity,
+    component_type: type_id.TypeId,
+};
+
+pub const EntityRemoved = struct {
+    entity: Entity,
+};
+
+pub const EntityAdded = struct {
+    entity: Entity,
+};
+
+pub fn init(world: *World) !void {
+    try register(world, ComponentRemoved);
+    try register(world, ComponentAdded);
+    try register(world, EntityRemoved);
+    try register(world, EntityAdded);
 }
 
 test "Basic Events" {

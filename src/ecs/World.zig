@@ -54,6 +54,7 @@ pub fn init(allocator: Allocator, io: std.Io) !World {
         .frame = .{ .subtick = .init(1) },
     };
     try ecs.Schedule.init(allocator, &world);
+    try ecs.event.init(&world);
 
     return world;
 }
@@ -99,9 +100,16 @@ pub fn traverse(self: *const World, desc: ecs.TraverseDesc) !ecs.PairStorage.Tra
     return self.pairStorage.traverse(self.allocator, desc);
 }
 
+fn emit(self: *World, event: anytype) !void {
+    const events = self.getGlobalMut(ecs.event.Events(@TypeOf(event))) orelse return;
+    try events.emit(self.allocator, event);
+}
+
 pub fn createEmpty(self: *World, allocator: Allocator) !Entity {
     defer self.nextEntity.id += 1;
-    return self.storage.addEntity(allocator, self.nextEntity);
+    const entity = try self.storage.addEntity(allocator, self.nextEntity);
+    try self.emit(ecs.event.EntityAdded{ .entity = entity });
+    return entity;
 }
 
 /// Wrapper around calling `createEmpty` and `add`
@@ -146,11 +154,36 @@ pub fn add(self: *World, gpa: Allocator, entity: Entity, components: anytype) !v
 /// Insert an existing entity into the world. Used for internal entities.
 pub fn insertEntity(self: *World, gpa: Allocator, entity: Entity) !void {
     _ = try self.storage.addEntity(gpa, entity);
+    try self.emit(ecs.event.EntityAdded{ .entity = entity });
+}
+
+/// Remove the entity immediately.
+pub fn removeEntity(self: *World, gpa: Allocator, entity: Entity) !void {
+    if (self.storage.entity_map.get(entity) == null) return;
+    self.storage.removeEntity(gpa, entity);
+    try self.emit(ecs.event.EntityRemoved{ .entity = entity });
+}
+
+/// Remove all entities marked for removal
+pub fn removeMarked(self: *World, gpa: Allocator) !void {
+    for (self.storage.marked.items) |entity| {
+        try self.removeEntity(gpa, entity);
+    }
+    self.storage.marked.clearRetainingCapacity();
+}
+
+pub fn removeComponent(self: *World, entity: Entity, comptime T: type) !void {
+    try self.storage.removeComponent(self.allocator, entity, T);
+    try self.emit(ecs.event.ComponentRemoved{ .entity = entity, .component_type = typeId(T) });
 }
 
 /// Set the component to the given value. Will add the component to the entity if not present.
 pub fn set(self: *World, entity: Entity, comptime T: type, arg: T) !*T {
-    return try self.storage.setComponents(self.allocator, entity, T, arg, self.frame);
+    const added = !self.has(entity, T);
+    const component = try self.storage.setComponents(self.allocator, entity, T, arg, self.frame);
+    if (added)
+        try self.emit(ecs.event.ComponentAdded{ .entity = entity, .component_type = typeId(T) });
+    return component;
 }
 
 pub fn get(self: *World, entity: Entity, comptime T: type) ?*const T {
@@ -251,7 +284,7 @@ pub fn step(self: *World) !void {
     self.frame.advanceFrame();
     // TODO: make schedule an actual member of world. Why is it like this?
     try ecs.Schedule.runPipeline(self);
-    self.storage.removeMarked(self.allocator);
+    try self.removeMarked(self.allocator);
 }
 
 // ------ Tests ------
