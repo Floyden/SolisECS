@@ -159,7 +159,10 @@ pub fn insertEntity(self: *World, gpa: Allocator, entity: Entity) !void {
 
 /// Remove the entity immediately.
 pub fn removeEntity(self: *World, gpa: Allocator, entity: Entity) !void {
-    if (self.storage.entity_map.get(entity) == null) return;
+    const entry = self.storage.entity_map.get(entity) orelse return;
+    for (entry.archetype.components.items) |list| {
+        try self.emit(ecs.event.ComponentRemoved{ .entity = entity, .component_type = list.desc.id });
+    }
     self.storage.removeEntity(gpa, entity);
     try self.emit(ecs.event.EntityRemoved{ .entity = entity });
 }
