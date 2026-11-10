@@ -83,6 +83,10 @@ pub fn removeEntity(self: *Storage, gpa: std.mem.Allocator, entity: Entity) void
     const entry = self.entity_map.get(entity) orelse return;
     entry.archetype.removeEntity(gpa, entity);
     _ = self.entity_map.swapRemove(entity);
+
+    if (entry.index < entry.archetype.entities.items.len) {
+        self.entity_map.getPtr(entry.archetype.entities.items[entry.index]).?.index = entry.index;
+    }
 }
 
 fn findLocation(self: *const Storage, entity: Entity) ?EntityEntry {
@@ -158,6 +162,7 @@ pub fn removeComponent(self: *Storage, gpa: Allocator, entity: Entity, comptime 
     // Find Archetype of the Entity
     const location = self.findLocation(entity) orelse return error.EntityNotFound;
     var source = location.archetype;
+    if (!source.hasType(T)) return error.ComponentNotFound;
 
     // Find new destination
     var destination: ?*Archetype = null;
@@ -337,6 +342,26 @@ test "Remove Entity Directly" {
     storage.removeEntity(gpa, e);
 
     try std.testing.expect(storage.get(Position, e) == null);
+}
+
+test "Remove Entity" {
+    const gpa = std.testing.allocator;
+    var storage = try Storage.init(gpa);
+    defer storage.deinit(gpa);
+
+    const a = try storage.addEntity(gpa, Entity{ .id = 1 });
+    const b = try storage.addEntity(gpa, Entity{ .id = 2 });
+    _ = try storage.setComponents(gpa, a, Position, .{ .x = 1, .y = 1 }, .{});
+    _ = try storage.setComponents(gpa, b, Position, .{ .x = 2, .y = 2 }, .{});
+
+    storage.removeEntity(gpa, a);
+
+    try std.testing.expect(storage.get(Position, a) == null);
+    const pos = storage.get(Position, b) orelse return error.NullValue;
+    try std.testing.expectEqual(@as(f32, 2), pos.x);
+
+    const e = try storage.addEntity(gpa, Entity{ .id = 42 });
+    try std.testing.expectError(error.ComponentNotFound, storage.removeComponent(gpa, e, Position));
 }
 
 test "Basic Global" {

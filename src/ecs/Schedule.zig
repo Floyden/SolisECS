@@ -107,6 +107,7 @@ pub fn runSystem(world: *World, entity: Entity) !void {
             sys.state.store(.idle, .release);
     }
 
+    // TODO: Replace this by a cached topologically sorted run
     var deps = world.pairStorage.match(.{
         .src = entity,
         .dst = .any,
