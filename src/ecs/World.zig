@@ -37,6 +37,7 @@ commands: ecs.Commands,
 components: std.AutoHashMapUnmanaged(ComponentDesc, void),
 storage: ecs.Storage,
 pairStorage: ecs.PairStorage,
+scheduler: ecs.Schedule,
 
 nextEntity: Entity,
 
@@ -52,8 +53,9 @@ pub fn init(allocator: Allocator, io: std.Io) !World {
         .storage = try .init(allocator),
         .pairStorage = .empty,
         .frame = .{ .subtick = .init(1) },
+        .scheduler = undefined,
     };
-    try ecs.Schedule.init(allocator, &world);
+    world.scheduler = try ecs.Schedule.init(allocator, &world);
     try ecs.event.init(&world);
 
     return world;
@@ -286,7 +288,7 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
 pub fn step(self: *World) !void {
     self.frame.advanceFrame();
     // TODO: make schedule an actual member of world. Why is it like this?
-    try ecs.Schedule.runPipeline(self);
+    try self.scheduler.runPipeline(self.allocator, self);
     try self.removeMarked(self.allocator);
 }
 

@@ -10,7 +10,10 @@ const QueryIter = ecs.QueryIter;
 const Self = @This();
 pub const Stage = struct {};
 
-pub fn init(gpa: std.mem.Allocator, world: *World) !void {
+// First stage to run
+start_stage: Entity,
+
+pub fn init(gpa: std.mem.Allocator, world: *World) !Self {
     // const schedule = try world.create(gpa);
 
     try world.register(gpa, Stage);
@@ -36,23 +39,24 @@ pub fn init(gpa: std.mem.Allocator, world: *World) !void {
     try world.addPair(.stage_update, Entity.DependsOn, .stage_pre_update);
     try world.addPair(.stage_pre_update, Entity.DependsOn, .stage_frame_start);
 
-    // world.schedule = schedule;
+    return .{
+        .start_stage = .stage_startup,
+    };
 }
 
-pub fn runStartup(world: *World) !void {
-    // TODO: Filter disabled systems
-    var query = try Query(.{*ecs.System}, .{}).init(world.allocator, world, .none);
-    defer query.deinit(world.allocator);
+pub fn runPipeline(self: *Self, gpa: std.mem.Allocator, world: *World) !void {
+    var query = try Query(.{*ecs.System}, .{}).init(gpa, world, .none);
+    defer query.deinit(gpa);
 
     var stage_iter = try world.traverse(ecs.TraverseDesc{
         .relation = ecs.typeId(Entity.DependsOn),
         .reversed = true,
-        .node = .stage_startup,
+        .node = self.start_stage,
     });
     defer stage_iter.deinit();
 
     while (try stage_iter.next()) |stage| {
-        var sys_iter = try query.traverse(world.allocator, .{
+        var sys_iter = try query.traverse(gpa, .{
             .reversed = true,
             .node = stage,
             .relation = ecs.typeId(Entity.InStage),
@@ -64,36 +68,11 @@ pub fn runStartup(world: *World) !void {
         }
     }
 
-    // TODO: Remove startup systems
-}
-
-pub fn runPipeline(world: *World) !void {
-    if (world.frame.tick == 1)
-        try runStartup(world);
-
-    var query = try Query(.{*ecs.System}, .{}).init(world.allocator, world, .none);
-    defer query.deinit(world.allocator);
-
-    // TODO: stage_frame_start may not be the first stage of the system
-    var stage_iter = try world.traverse(ecs.TraverseDesc{
-        .relation = ecs.typeId(Entity.DependsOn),
-        .reversed = true,
-        .node = .stage_frame_start,
-    });
-    defer stage_iter.deinit();
-
-    while (try stage_iter.next()) |stage| {
-        var sys_iter = try query.traverse(world.allocator, .{
-            .reversed = true,
-            .node = stage,
-            .relation = ecs.typeId(Entity.InStage),
-        });
-        defer sys_iter.deinit();
-
-        while (try sys_iter.next()) |_| {
-            try runSystem(world, sys_iter.entity);
-        }
+    if (world.frame.tick == 1 and self.start_stage.id == Entity.stage_startup.id) {
+        self.start_stage = .stage_frame_start;
+        try self.runPipeline(gpa, world);
     }
+
     _ = world.frame.advanceSubtick();
     world.commands.execute(world);
 }
