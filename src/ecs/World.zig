@@ -62,6 +62,7 @@ pub fn init(allocator: Allocator, io: std.Io) !World {
 }
 
 pub fn deinit(self: *World) void {
+    self.scheduler.deinit(self.allocator);
     self.commands.deinit(self.allocator);
     self.storage.deinit(self.allocator);
     self.pairStorage.deinit(self.allocator);
@@ -197,6 +198,11 @@ pub fn get(self: *World, entity: Entity, comptime T: type) ?*const T {
 
 pub fn getMut(self: *World, entity: Entity, comptime T: type) ?*T {
     return self.storage.getMut(T, entity, self.frame);
+}
+
+// Access component T without marking it as changed
+pub fn getMutUntracked(self: *World, entity: Entity, comptime T: type) ?*T {
+    return self.storage.getMut(T, entity, null);
 }
 
 pub fn has(self: *World, entity: Entity, comptime T: type) bool {

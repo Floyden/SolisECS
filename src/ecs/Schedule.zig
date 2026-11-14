@@ -12,7 +12,10 @@ pub const Stage = struct {};
 
 // First stage to run
 start_stage: Entity,
-system_cache: std.AutoArrayHashMapUnmanaged(Entity, []Entity) = .empty,
+stage_cache: []Entity,
+
+system_cache: std.AutoHashMapUnmanaged(Entity, []Entity) = .empty,
+system_query: Query(.{System}, .{ecs.Changed(System)}),
 
 pub fn init(gpa: std.mem.Allocator, world: *World) !Self {
     // const schedule = try world.create(gpa);
@@ -42,7 +45,20 @@ pub fn init(gpa: std.mem.Allocator, world: *World) !Self {
 
     return .{
         .start_stage = .stage_startup,
+        .system_query = try .init(gpa, world, Entity.none),
+        .stage_cache = &.{},
     };
+}
+
+pub fn deinit(self: *Self, gpa: std.mem.Allocator) void {
+    var iter = self.system_cache.valueIterator();
+    while (iter.next()) |e| {
+        if (e.len > 0)
+            gpa.free(e.*);
+    }
+    self.system_cache.deinit(gpa);
+    self.system_query.deinit(gpa);
+    gpa.free(self.stage_cache);
 }
 
 const StackEntry = struct {
@@ -90,25 +106,25 @@ pub fn createRun(gpa: std.mem.Allocator, world: *World, stage: Entity) ![]Entity
         try stack.append(gpa, .new(pair.src, world, false));
 
         while (stack.items.len > 0) {
-            var system = stack.last().?;
+            var system = stack.lastPtr().?;
             if (system.iter.next()) |dep| {
-                if (!world.hasPair(dep.dst, Entity.InStage, stage)) return error.DependencyOutsideStage;
-                if (!try markSystem(gpa, &visited, system.entity)) continue;
-                try stack.append(gpa, .new(pair.src, world, true));
+                if (!world.has(dep.dst, System)) continue;
+                if (!world.hasPair(dep.dst, Entity.InStage, stage)) {
+                    return error.DependencyOutsideStage;
+                }
+                if (!try markSystem(gpa, &visited, dep.dst)) continue;
+                try stack.append(gpa, .new(dep.dst, world, false));
             } else {
-                _ = stack.pop();
-                visited.getPtr(system.entity).?.* = true;
-                try res.append(gpa, system.entity);
+                const system_ent = stack.pop().?.entity;
+                visited.getPtr(system_ent).?.* = true;
+                try res.append(gpa, system_ent);
             }
         }
     }
     return try res.toOwnedSlice(gpa);
 }
 
-pub fn runPipeline(self: *Self, gpa: std.mem.Allocator, world: *World) !void {
-    var query = try Query(.{*ecs.System}, .{}).init(gpa, world, .none);
-    defer query.deinit(gpa);
-
+fn refreshStageCache(self: *Self, gpa: std.mem.Allocator, world: *World) !void {
     var stage_iter = try world.traverse(ecs.TraverseDesc{
         .relation = ecs.typeId(Entity.DependsOn),
         .reversed = true,
@@ -116,21 +132,48 @@ pub fn runPipeline(self: *Self, gpa: std.mem.Allocator, world: *World) !void {
     });
     defer stage_iter.deinit();
 
-    while (try stage_iter.next()) |stage| {
-        var sys_iter = try query.traverse(gpa, .{
-            .reversed = true,
-            .node = stage,
-            .relation = ecs.typeId(Entity.InStage),
-        });
-        defer sys_iter.deinit();
+    var res: std.ArrayList(Entity) = .empty;
 
-        while (try sys_iter.next()) |_| {
-            try runSystem(world, sys_iter.entity);
+    while (try stage_iter.next()) |stage|
+        try res.append(gpa, stage);
+    if (self.stage_cache.len > 0)
+        gpa.free(self.stage_cache);
+    self.stage_cache = try res.toOwnedSlice(gpa);
+}
+
+fn refreshSystemCaches(self: *Self, gpa: std.mem.Allocator, world: *World) !void {
+    var query = try Query(.{Stage}, .{}).init(gpa, world, .none);
+    defer query.deinit(gpa);
+    var iter = query.iter();
+
+    while (iter.next()) |_| {
+        for (iter.entities.?) |stage| {
+            const entry = try self.system_cache.getOrPut(gpa, stage);
+            if (entry.found_existing and entry.value_ptr.len > 0)
+                gpa.free(entry.value_ptr.*);
+            entry.value_ptr.* = try createRun(gpa, world, stage);
+        }
+    }
+}
+
+pub fn runPipeline(self: *Self, gpa: std.mem.Allocator, world: *World) !void {
+    self.system_query.prepare(world);
+    var iter = self.system_query.iter();
+    if (iter.next()) |_| {
+        try self.refreshStageCache(gpa, world);
+        try self.refreshSystemCaches(gpa, world);
+    }
+
+    for (self.stage_cache) |stage| {
+        const run = self.system_cache.get(stage) orelse return error.MissingStage;
+        for (run) |system| {
+            try runSystem(world, system);
         }
     }
 
     if (world.frame.tick == 1 and self.start_stage.id == Entity.stage_startup.id) {
         self.start_stage = .stage_frame_start;
+        try self.refreshStageCache(gpa, world);
         try self.runPipeline(gpa, world);
     }
 
@@ -139,7 +182,7 @@ pub fn runPipeline(self: *Self, gpa: std.mem.Allocator, world: *World) !void {
 }
 
 pub fn runSystem(world: *World, entity: Entity) !void {
-    var system = world.getMut(entity, System) orelse return;
+    var system = world.getMutUntracked(entity, System) orelse return;
     if (system.last_frame.tick >= world.frame.tick) return;
     if (system.state.cmpxchgStrong(.idle, .pending, .acq_rel, .acquire) != null) return;
     errdefer {
@@ -157,7 +200,7 @@ pub fn runSystem(world: *World, entity: Entity) !void {
         try runSystem(world, dep.dst);
     }
 
-    system = world.getMut(entity, System) orelse return; // system may have changed due to other systems
+    system = world.getMutUntracked(entity, System) orelse return; // system may have changed due to other systems
     system.last_frame = world.frame.advanceSubtick();
     system.prepare(world);
     system.state.store(.running, .release);

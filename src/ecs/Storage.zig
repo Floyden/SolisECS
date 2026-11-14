@@ -141,14 +141,15 @@ pub fn get(self: *const Storage, comptime T: type, entity: Entity) ?*const T {
     return null;
 }
 
-pub fn getMut(self: *const Storage, comptime T: type, entity: Entity, frame: Frame) ?*T {
+pub fn getMut(self: *const Storage, comptime T: type, entity: Entity, frame: ?Frame) ?*T {
     const location = self.findLocation(entity) orelse return null;
     const source = location.archetype;
     const index = location.index;
 
     for (source.components.items) |*list| {
         if (list.desc.id == ecs.typeId(T)) {
-            source.markComponentModified(T, frame);
+            if (frame) |f|
+                source.markComponentModified(T, f);
             if (@sizeOf(T) == 0)
                 return @ptrCast(list.getMut(T));
 
