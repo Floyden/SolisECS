@@ -12,6 +12,7 @@ pub const Stage = struct {};
 
 // First stage to run
 start_stage: Entity,
+system_cache: std.AutoArrayHashMapUnmanaged(Entity, []Entity) = .empty,
 
 pub fn init(gpa: std.mem.Allocator, world: *World) !Self {
     // const schedule = try world.create(gpa);
@@ -42,6 +43,66 @@ pub fn init(gpa: std.mem.Allocator, world: *World) !Self {
     return .{
         .start_stage = .stage_startup,
     };
+}
+
+const StackEntry = struct {
+    entity: Entity,
+    iter: ecs.PairStorage.Iterator,
+
+    fn new(id: Entity, world: *const World, is_id_src: bool) @This() {
+        return .{ .entity = id, .iter = world.pairStorage.match(.{
+            .src = if (!is_id_src) id else .any,
+            .dst = if (!is_id_src) .any else id,
+            .relation = ecs.typeId(Entity.DependsOn),
+        }) };
+    }
+};
+fn markSystem(
+    gpa: std.mem.Allocator,
+    visited: *std.AutoHashMapUnmanaged(Entity, bool),
+    system_ent: Entity,
+) !bool {
+    const entity = try visited.getOrPut(gpa, system_ent);
+    if (entity.found_existing) {
+        if (!entity.value_ptr.*)
+            return error.CyclicDependencies;
+        return false;
+    }
+    entity.value_ptr.* = false;
+    return true;
+}
+
+pub fn createRun(gpa: std.mem.Allocator, world: *World, stage: Entity) ![]Entity {
+    var systems = world.pairStorage.match(.{
+        .src = .any,
+        .dst = stage,
+        .relation = ecs.typeId(Entity.InStage),
+    });
+    var visited: std.AutoHashMapUnmanaged(Entity, bool) = .empty;
+    defer visited.deinit(gpa);
+    var stack: std.ArrayList(StackEntry) = .empty;
+    defer stack.deinit(gpa);
+
+    var res: std.ArrayList(Entity) = .empty;
+
+    while (systems.next()) |pair| {
+        if (!try markSystem(gpa, &visited, pair.src)) continue;
+        try stack.append(gpa, .new(pair.src, world, false));
+
+        while (stack.items.len > 0) {
+            var system = stack.last().?;
+            if (system.iter.next()) |dep| {
+                if (!world.hasPair(dep.dst, Entity.InStage, stage)) return error.DependencyOutsideStage;
+                if (!try markSystem(gpa, &visited, system.entity)) continue;
+                try stack.append(gpa, .new(pair.src, world, true));
+            } else {
+                _ = stack.pop();
+                visited.getPtr(system.entity).?.* = true;
+                try res.append(gpa, system.entity);
+            }
+        }
+    }
+    return try res.toOwnedSlice(gpa);
 }
 
 pub fn runPipeline(self: *Self, gpa: std.mem.Allocator, world: *World) !void {
@@ -165,4 +226,40 @@ test "Systems" {
     try std.testing.expect(systems_executed[2]);
     try std.testing.expect(systems_executed[3]);
     try std.testing.expect(systems_executed[4]);
+}
+
+test "createRun" {
+    const Systems = struct {
+        fn system() void {}
+    };
+
+    const gpa = std.testing.allocator;
+    var world = try World.init(gpa, std.testing.io);
+    defer world.deinit();
+
+    const other = try world.addSystem(gpa, Systems.system, .{ .stage = .stage_pre_update });
+    const first = try world.addSystem(gpa, Systems.system, .{ .stage = .stage_update });
+    const last = try world.addSystem(gpa, Systems.system, .{ .stage = .stage_update, .predecessors = &.{first} });
+    const middle = try world.addSystem(gpa, Systems.system, .{
+        .stage = .stage_update,
+        .predecessors = &.{other},
+        .successors = &.{last},
+    });
+
+    const run = try createRun(gpa, &world, .stage_update);
+    defer gpa.free(run);
+
+    const index = struct {
+        fn of(items: []const Entity, e: Entity) usize {
+            for (items, 0..) |item, i| if (item.id == e.id) return i;
+            unreachable;
+        }
+    }.of;
+    try std.testing.expectEqual(@as(usize, 3), run.len);
+    for (run) |e| try std.testing.expect(e.id != other.id);
+    try std.testing.expect(index(run, first) < index(run, last));
+    try std.testing.expect(index(run, middle) < index(run, last));
+
+    try world.addPair(first, Entity.DependsOn, last);
+    try std.testing.expectError(error.DependencyCycle, createRun(gpa, &world, .stage_update));
 }
