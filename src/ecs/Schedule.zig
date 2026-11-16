@@ -100,6 +100,7 @@ pub fn createRun(gpa: std.mem.Allocator, world: *World, stage: Entity) ![]Entity
     defer stack.deinit(gpa);
 
     var res: std.ArrayList(Entity) = .empty;
+    errdefer res.deinit(gpa);
 
     while (systems.next()) |pair| {
         if (!try markSystem(gpa, &visited, pair.src)) continue;
@@ -109,9 +110,7 @@ pub fn createRun(gpa: std.mem.Allocator, world: *World, stage: Entity) ![]Entity
             var system = stack.lastPtr().?;
             if (system.iter.next()) |dep| {
                 if (!world.has(dep.dst, System)) continue;
-                if (!world.hasPair(dep.dst, Entity.InStage, stage)) {
-                    return error.DependencyOutsideStage;
-                }
+                if (!world.hasPair(dep.dst, Entity.InStage, stage)) continue;
                 if (!try markSystem(gpa, &visited, dep.dst)) continue;
                 try stack.append(gpa, .new(dep.dst, world, false));
             } else {
@@ -304,5 +303,5 @@ test "createRun" {
     try std.testing.expect(index(run, middle) < index(run, last));
 
     try world.addPair(first, Entity.DependsOn, last);
-    try std.testing.expectError(error.DependencyCycle, createRun(gpa, &world, .stage_update));
+    try std.testing.expectError(error.CyclicDependencies, createRun(gpa, &world, .stage_update));
 }
