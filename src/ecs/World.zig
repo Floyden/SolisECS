@@ -217,6 +217,7 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
     const TupleType = std.meta.ArgsTuple(SystemType);
 
     const Context = struct {
+        const ReturnType = system_info.@"fn".return_type.?;
         callback: *const SystemType,
         params: TupleType,
 
@@ -231,8 +232,15 @@ pub fn addSystem(self: *World, gpa: Allocator, system: anytype, desc: ecs.System
             gpa_ctx.destroy(self_ctx);
         }
 
-        fn invoke(self_ctx: *const @This()) void {
-            @call(.auto, self_ctx.callback, self_ctx.params);
+        fn invoke(self_ctx: *const @This()) !void {
+            const return_info = @typeInfo(ReturnType);
+            if (comptime return_info == .void) {
+                @call(.auto, self_ctx.callback, self_ctx.params);
+            } else if (comptime return_info == .error_union and return_info.error_union.payload == void) {
+                @call(.auto, self_ctx.callback, self_ctx.params) catch |e| {
+                    return e;
+                };
+            } else @compileError("System must return void or error!void");
         }
 
         fn prepare(self_ctx: *@This(), world: *World) void {
@@ -317,4 +325,19 @@ test "create" {
     const e2 = try world.create(gpa, Bar{ .y = 2 });
     try std.testing.expect(world.get(e2, Bar).?.y == 2);
     try std.testing.expect(world.get(e2, Foo).?.x == 4);
+}
+
+fn foo1() void {}
+fn foo2() !void {
+    return error.Test;
+}
+
+test "add systems" {
+    const gpa = std.testing.allocator;
+    var world = try World.init(gpa, std.testing.io);
+    defer world.deinit();
+
+    _ = try world.addSystem(gpa, foo1, .{ .stage = .stage_update });
+    _ = try world.addSystem(gpa, foo2, .{ .stage = .stage_update });
+    try std.testing.expectError(error.Test, world.step());
 }

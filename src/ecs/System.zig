@@ -3,7 +3,7 @@ const std = @import("std");
 
 const Frame = ecs.World.Frame;
 
-const SystemFn = *const fn (*anyopaque) void;
+const SystemFn = *const fn (*const anyopaque) anyerror!void;
 
 pub const SystemDesc = struct {
     stage: ecs.Entity = .stage_update,
@@ -15,6 +15,7 @@ pub const ExecutionState = enum(u32) {
     idle,
     pending, // waiting for dependencies
     running, // currently running
+    failed,
 };
 
 pub const System = struct {
@@ -29,8 +30,8 @@ pub const System = struct {
         @call(.auto, self.deinit_cb, .{ self.context, gpa });
     }
 
-    pub fn invoke(self: System) void {
-        @call(.auto, self.callback, .{self.context});
+    pub fn invoke(self: System) anyerror!void {
+        try @call(.auto, self.callback, .{self.context});
     }
 
     pub fn prepare(self: System, world: *ecs.World) void {

@@ -203,7 +203,10 @@ pub fn runSystem(world: *World, entity: Entity) !void {
     system.last_frame = world.frame.advanceSubtick();
     system.prepare(world);
     system.state.store(.running, .release);
-    system.callback(system.context);
+    system.invoke() catch |e| {
+        system.state.store(.failed, .release);
+        return e;
+    };
     system.state.store(.idle, .release);
 }
 
